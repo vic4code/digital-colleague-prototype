@@ -1,0 +1,61 @@
+# INFO — the accounts and channels Ada *is*.
+#
+# IMPORTANT: no secret values live here. Each account lists the *names* of the
+# environment variables (or secret-store keys) that hold its credentials. This
+# is what lets Ada's whole identity — Person, Soul, Info — live in git while her
+# Gmail and Slack credentials never do. Run `dcolleague doctor -c colleagues/ada`
+# to check they resolve.
+
+accounts:
+  # Ada's own mailbox. She reads and (with approval) sends as this address.
+  gmail:
+    provider: gmail
+    address: ada@acme.com
+    label: "Ada — Legal inbox"
+    scopes:
+      - https://www.googleapis.com/auth/gmail.modify
+    secrets:
+      clientId: GMAIL_OAUTH_CLIENT_ID
+      clientSecret: GMAIL_OAUTH_CLIENT_SECRET
+      refreshToken: GMAIL_OAUTH_REFRESH_TOKEN
+
+  # Ada's Slack presence in the ACME workspace.
+  slack:
+    provider: slack
+    address: "@ada"
+    label: "ACME workspace"
+    scopes:
+      - chat:write
+      - im:history
+      - channels:history
+    secrets:
+      botToken: SLACK_BOT_TOKEN
+      appToken: SLACK_APP_TOKEN
+      signingSecret: SLACK_SIGNING_SECRET
+
+channels:
+  # Local/dev presence — always available, no credentials.
+  - kind: console
+    policy: open
+
+  # Reachable in Slack; only paired humans may DM her.
+  - kind: slack
+    account: slack
+    policy: pairing
+    allow:
+      - elena@acme.com
+      - "#legal-intake"
+
+  # Reachable by email at her mailbox.
+  - kind: gmail
+    account: gmail
+    policy: allowlist
+    allow:
+      - "*@acme.com"
+
+# Coarse business-level authorization (RBAC) scopes for the control plane.
+permissions:
+  - contracts:read
+  - contracts:redline
+  - board:write
+  - email:draft          # note: draft only — sending needs human approval
