@@ -1,0 +1,31 @@
+{
+  "name": "digital-colleague-prototype",
+  "version": "0.1.0",
+  "description": "A deployable prototype of a digital colleague — an LLM agent with a persistent Person, Soul, and Info (accounts like Gmail & Slack), built in the spirit of the digital-colleagues-architecture and on top of the OpenClaw framework model.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "dcolleague": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --loader tsx --no-warnings src/cli.ts",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "run:ada": "npm run build && node dist/cli.js run --colleague ./colleagues/ada --channel console",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "yaml": "^2.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
