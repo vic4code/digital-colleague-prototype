@@ -17,6 +17,7 @@ describe("portable host packaging", () => {
     expect(compose).toContain("no-new-privileges:true");
     expect(compose).toContain("./colleagues/ada:/opt/dcolleague/colleague:ro");
     expect(compose).toContain("ada-memory:/var/lib/dcolleague/memory");
+    expect(compose).toContain("DC_EVENT_INGRESS_TOKEN: ${DC_EVENT_INGRESS_TOKEN:-}");
   });
 
   it("keeps Windows secrets out of task arguments and uses a bounded logon task", () => {
@@ -29,6 +30,17 @@ describe("portable host packaging", () => {
     expect(runner).toContain("$env:DC_MEMORY_DIR = $MemoryDir");
     expect(runner).toContain("Start-Transcript -Append");
     expect(runner).toContain("--web-root");
-    expect(runner).toContain("codex login status");
+    expect(runner).not.toContain("codex login status");
+    expect(runner).toContain("Get-Command codex");
+  });
+
+  it("allows macOS and Windows services to start before Codex login", () => {
+    const macInstaller = read("deploy/macos/install.sh");
+    const macRunner = read("deploy/macos/run-colleague.sh");
+    const windowsInstaller = read("deploy/windows/install.ps1");
+
+    expect(macInstaller).not.toContain("codex login status");
+    expect(macRunner).not.toContain("codex login status");
+    expect(windowsInstaller).not.toContain("@('login', 'status')");
   });
 });

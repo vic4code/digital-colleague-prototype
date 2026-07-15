@@ -10,7 +10,8 @@ turns to the loopback API and never receives Codex or connector credentials.
 
 ## Local development
 
-1. Verify Node.js, npm, Codex CLI, and `codex login status`.
+1. Verify Node.js, npm, and the Codex CLI. Existing login is optional because
+   the web surface can start the official app-server login flow.
 2. Run `npm install` once.
 3. Start `npm run dev:api` and confirm
    `http://127.0.0.1:8787/api/v1/health`.

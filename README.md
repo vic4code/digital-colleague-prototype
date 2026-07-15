@@ -346,6 +346,9 @@ The installer builds a versioned application under
 the installer upgrades the app while preserving the colleague, environment,
 memory, and logs.
 
+The service is allowed to start before Codex is signed in. Open the web UI and
+confirm or switch the displayed Codex account through the onboarding dialog.
+
 ```bash
 # Remove the app and LaunchAgent, but preserve Ada's data.
 ./deploy/macos/uninstall.sh --id ada
@@ -369,6 +372,9 @@ The installer creates a per-user Scheduled Task triggered at logon, with
 bounded restart attempts. The task command contains paths and the colleague id
 only; runtime settings stay in the user-protected `env\ada.env`. Re-running the
 installer upgrades the versioned app without overwriting colleague data.
+
+The task is allowed to start before Codex is signed in. Complete the official
+browser or device-code flow from Ada's account dialog after opening the web UI.
 
 ```powershell
 # Preserve colleague, environment, memory, and logs.

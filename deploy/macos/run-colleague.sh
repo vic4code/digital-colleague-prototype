@@ -31,7 +31,6 @@ HOST=${DC_HOST:-127.0.0.1}
 command -v node >/dev/null 2>&1 || { echo "Node.js is required." >&2; exit 1; }
 if [[ "$RUNTIME" == codex ]]; then
   command -v codex >/dev/null 2>&1 || { echo "Codex CLI is required." >&2; exit 1; }
-  codex login status >/dev/null
 fi
 [[ -f "$APP_CURRENT/dist/cli.js" ]] || { echo "Installed app is incomplete." >&2; exit 1; }
 [[ -d "$COLLEAGUE_DIR" ]] || { echo "Colleague '$ID' is not installed." >&2; exit 1; }

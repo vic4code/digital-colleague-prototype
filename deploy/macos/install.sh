@@ -25,7 +25,6 @@ command -v node >/dev/null 2>&1 || { echo "Node.js 20.19+ is required." >&2; exi
 command -v npm >/dev/null 2>&1 || { echo "npm is required." >&2; exit 1; }
 if [[ ${DC_SKIP_CODEX_PREFLIGHT:-0} != 1 ]]; then
   command -v codex >/dev/null 2>&1 || { echo "Codex CLI is required." >&2; exit 1; }
-  codex login status >/dev/null || { echo "Run 'codex login' before installing." >&2; exit 1; }
 fi
 
 NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")

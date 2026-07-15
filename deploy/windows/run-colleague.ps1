@@ -34,8 +34,6 @@ $Port = if ($env:DC_PORT) { $env:DC_PORT } else { '8787' }
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is required.' }
 if ($Runtime -eq 'codex') {
     if (-not (Get-Command codex -ErrorAction SilentlyContinue)) { throw 'Codex CLI is required.' }
-    & codex login status | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Run 'codex login' for this Windows user." }
 }
 if (-not (Test-Path -LiteralPath (Join-Path $AppCurrent 'dist\cli.js'))) { throw 'Installed app is incomplete.' }
 if (-not (Test-Path -LiteralPath $ColleagueDir -PathType Container)) { throw "Colleague '$Id' is not installed." }

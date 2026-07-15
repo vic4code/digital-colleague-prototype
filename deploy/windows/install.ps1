@@ -35,7 +35,6 @@ if ([int]$NodeParts[0] -lt 20 -or ([int]$NodeParts[0] -eq 20 -and [int]$NodePart
 }
 if (-not $SkipCodexPreflight) {
     if (-not (Get-Command codex -ErrorAction SilentlyContinue)) { throw 'Codex CLI is required.' }
-    Invoke-Checked 'codex' @('login', 'status')
 }
 
 $PersonFile = Join-Path $Colleague 'person.yaml'
