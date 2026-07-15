@@ -17,6 +17,8 @@ import { MemoryStore } from "../runtime/memory.js";
  */
 export interface GatewayOptions {
   runtime?: string;
+  /** Writable state location when the colleague definition is read-only. */
+  memoryDir?: string;
   /** Restrict to a subset of the colleague's channels. */
   channels?: string[];
 }
@@ -28,7 +30,10 @@ export class StandaloneGateway {
 
   constructor(private readonly colleague: Colleague, private readonly opts: GatewayOptions = {}) {
     this.runtime = makeRuntime(opts.runtime);
-    this.memory = new MemoryStore(colleague.dir);
+    this.memory = new MemoryStore(
+      colleague.dir,
+      opts.memoryDir ?? process.env.DC_MEMORY_DIR,
+    );
   }
 
   get runtimeName(): string {

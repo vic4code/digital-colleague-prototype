@@ -5,6 +5,8 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { extname, resolve, sep } from "node:path";
 import type { Reply, Turn } from "../colleague/types.js";
 import { makeTurn } from "../channels/channel.js";
 
@@ -21,6 +23,7 @@ export interface TurnServerOptions {
   runtime: string;
   timeoutMs?: number;
   maxConcurrent?: number;
+  webRoot?: string;
 }
 
 class HttpError extends Error {
@@ -41,6 +44,89 @@ function securityHeaders(response: ServerResponse): void {
   response.setHeader("x-content-type-options", "nosniff");
   response.setHeader("x-frame-options", "DENY");
   response.setHeader("referrer-policy", "no-referrer");
+}
+
+const CONTENT_TYPES: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+};
+
+function staticSecurityHeaders(response: ServerResponse): void {
+  response.setHeader(
+    "content-security-policy",
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+  );
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-frame-options", "DENY");
+  response.setHeader("referrer-policy", "no-referrer");
+}
+
+async function serveStatic(
+  request: IncomingMessage,
+  response: ServerResponse,
+  configuredRoot: string,
+): Promise<boolean> {
+  if ((request.method !== "GET" && request.method !== "HEAD") || !request.url) {
+    return false;
+  }
+
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
+  } catch {
+    return false;
+  }
+  if (
+    pathname.includes("\0") ||
+    pathname.includes("\\") ||
+    pathname.split("/").some((segment) => segment === "..")
+  ) {
+    return false;
+  }
+
+  const root = await realpath(configuredRoot).catch(() => undefined);
+  if (!root) return false;
+  const relativePath = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  let candidate = resolve(root, relativePath);
+  const insideRoot = (file: string) => file === root || file.startsWith(`${root}${sep}`);
+  if (!insideRoot(candidate)) return false;
+
+  let fileInfo = await stat(candidate).catch(() => undefined);
+  if (fileInfo?.isDirectory()) {
+    candidate = resolve(candidate, "index.html");
+    fileInfo = await stat(candidate).catch(() => undefined);
+  }
+  if (!fileInfo?.isFile() && !extname(relativePath)) {
+    candidate = resolve(root, "index.html");
+    fileInfo = await stat(candidate).catch(() => undefined);
+  }
+  if (!fileInfo?.isFile()) return false;
+
+  const canonicalFile = await realpath(candidate).catch(() => undefined);
+  if (!canonicalFile || !insideRoot(canonicalFile)) return false;
+  const body = await readFile(canonicalFile);
+  staticSecurityHeaders(response);
+  response.statusCode = 200;
+  response.setHeader(
+    "content-type",
+    CONTENT_TYPES[extname(canonicalFile).toLowerCase()] ?? "application/octet-stream",
+  );
+  response.setHeader(
+    "cache-control",
+    pathname.startsWith("/assets/")
+      ? "public, max-age=31536000, immutable"
+      : "no-cache",
+  );
+  response.setHeader("content-length", body.byteLength);
+  response.end(request.method === "HEAD" ? undefined : body);
+  return true;
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
@@ -141,6 +227,14 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
             colleague: options.colleague,
           },
         });
+        return;
+      }
+
+      if (
+        options.webRoot &&
+        !request.url?.startsWith("/api/") &&
+        (await serveStatic(request, response, options.webRoot))
+      ) {
         return;
       }
 

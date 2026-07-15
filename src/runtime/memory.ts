@@ -18,8 +18,8 @@ export interface MemoryEntry {
 export class MemoryStore {
   private readonly file: string;
 
-  constructor(colleagueDir: string) {
-    const memDir = join(colleagueDir, "memory");
+  constructor(colleagueDir: string, memoryDir?: string) {
+    const memDir = memoryDir ?? join(colleagueDir, "memory");
     if (!existsSync(memDir)) mkdirSync(memDir, { recursive: true });
     this.file = join(memDir, "log.jsonl");
   }

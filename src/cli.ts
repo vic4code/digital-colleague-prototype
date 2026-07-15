@@ -46,11 +46,17 @@ program
   .description("Serve the local web turn API using Codex app-server.")
   .requiredOption("-c, --colleague <dir>", "path to the colleague directory")
   .option("-r, --runtime <kind>", "agent runtime: codex | echo", "codex")
-  .option("-p, --port <number>", "localhost port", "8787")
+  .option("-p, --port <number>", "HTTP port", "8787")
+  .option("--host <host>", "listen host: 127.0.0.1 | localhost | 0.0.0.0", "127.0.0.1")
+  .option("--web-root <dir>", "serve a built web app from this directory")
   .action(async (opts) => {
     const port = Number.parseInt(String(opts.port), 10);
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
       throw new Error(`Invalid port: ${opts.port}`);
+    }
+    const host = String(opts.host);
+    if (!["127.0.0.1", "localhost", "0.0.0.0"].includes(host)) {
+      throw new Error(`Invalid host: ${host}`);
     }
 
     const colleague = loadColleague(opts.colleague);
@@ -59,14 +65,15 @@ program
       dispatch: gateway.dispatch,
       colleague: { id: colleague.person.id, name: colleague.person.name },
       runtime: gateway.runtimeName,
+      webRoot: opts.webRoot ? String(opts.webRoot) : undefined,
     });
 
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
-      server.listen(port, "127.0.0.1", () => {
+      server.listen(port, host, () => {
         server.off("error", reject);
         console.log(
-          `[web] ${colleague.person.name} listening on http://127.0.0.1:${port} ` +
+          `[web] ${colleague.person.name} listening on http://${host}:${port} ` +
             `(${gateway.runtimeName})`,
         );
         resolve();

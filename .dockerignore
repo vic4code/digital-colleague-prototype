@@ -1,0 +1,14 @@
+.git
+.github
+.codex
+.env
+.env.*
+!.env.example
+dist
+dist-web
+node_modules
+output
+coverage
+npm-debug.log*
+deploy/openclaw/state
+deploy/openclaw/.env

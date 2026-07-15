@@ -1,11 +1,15 @@
 // @vitest-environment node
 import { once } from "node:events";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Reply, Turn } from "../colleague/types.js";
 import { createTurnServer, type TurnServer } from "./server.js";
 
 const servers: TurnServer[] = [];
+const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
@@ -14,11 +18,16 @@ afterEach(async () => {
         new Promise<void>((resolve) => server.close(() => resolve())),
     ),
   );
+  await Promise.all(
+    temporaryDirectories.splice(0).map((directory) =>
+      rm(directory, { recursive: true, force: true }),
+    ),
+  );
 });
 
 async function start(
   dispatch: (turn: Turn) => Promise<Reply>,
-  options: { timeoutMs?: number; maxConcurrent?: number } = {},
+  options: { timeoutMs?: number; maxConcurrent?: number; webRoot?: string } = {},
 ) {
   const server = createTurnServer({
     dispatch,
@@ -34,6 +43,46 @@ async function start(
 }
 
 describe("localhost turn API", () => {
+  it("serves the built web app and keeps API routes on the same origin", async () => {
+    const webRoot = await mkdtemp(join(tmpdir(), "dcolleague-web-"));
+    temporaryDirectories.push(webRoot);
+    await writeFile(join(webRoot, "index.html"), "<!doctype html><title>Ada</title>");
+    await mkdir(join(webRoot, "assets"));
+    await writeFile(join(webRoot, "assets", "app.js"), "console.log('ada')");
+    const url = await start(async () => ({ text: "unused" }), { webRoot });
+
+    const page = await fetch(`${url}/`);
+    const asset = await fetch(`${url}/assets/app.js`);
+    const spaRoute = await fetch(`${url}/conversation/today`);
+    const health = await fetch(`${url}/api/v1/health`);
+
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(page.headers.get("content-security-policy")).toContain("default-src 'self'");
+    expect(await page.text()).toContain("<title>Ada</title>");
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+    expect(asset.headers.get("cache-control")).toContain("public");
+    expect(spaRoute.status).toBe(200);
+    expect(await spaRoute.text()).toContain("<title>Ada</title>");
+    expect(health.status).toBe(200);
+  });
+
+  it("does not expose files outside the configured web root", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "dcolleague-web-"));
+    temporaryDirectories.push(parent);
+    const webRoot = join(parent, "public");
+    await mkdir(webRoot);
+    await writeFile(join(webRoot, "index.html"), "safe");
+    await writeFile(join(parent, "secret.txt"), "do not serve");
+    const url = await start(async () => ({ text: "unused" }), { webRoot });
+
+    const traversal = await fetch(`${url}/..%2Fsecret.txt`);
+
+    expect(traversal.status).toBe(404);
+    expect(await traversal.text()).not.toContain("do not serve");
+  });
+
   it("reports the configured colleague and native runtime", async () => {
     const url = await start(async () => ({ text: "unused" }));
 

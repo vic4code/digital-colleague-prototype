@@ -1,0 +1,38 @@
+services:
+  ada:
+    build:
+      context: .
+      args:
+        CODEX_VERSION: "0.144.4"
+    image: digital-colleague-prototype:local
+    environment:
+      DC_AGENT_RUNTIME: ${DC_AGENT_RUNTIME:-echo}
+      DC_COLLEAGUE_DIR: /opt/dcolleague/colleague
+      DC_MEMORY_DIR: /var/lib/dcolleague/memory
+      DC_PORT: "8787"
+      HOME: /home/dcolleague
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./colleagues/ada:/opt/dcolleague/colleague:ro
+      - ada-memory:/var/lib/dcolleague/memory
+      - ada-codex:/home/dcolleague/.codex
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "/opt/dcolleague/deploy/docker/healthcheck.mjs"]
+      interval: 10s
+      timeout: 3s
+      start_period: 20s
+      retries: 5
+
+volumes:
+  ada-memory:
+  ada-codex:
