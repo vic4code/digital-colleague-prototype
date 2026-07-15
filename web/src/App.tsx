@@ -10,7 +10,6 @@ import {
   AudioOutlined,
   CheckCircleOutlined,
   SendOutlined,
-  TeamOutlined,
 } from "@ant-design/icons";
 import { Avatar, Button, ConfigProvider, Input, Tooltip } from "antd";
 import type { GetRef } from "antd";
@@ -285,7 +284,11 @@ export function App({ voiceSupported = false }: AppProps) {
       <div className="app-shell">
         <header className="topbar">
           <a className="brand" href="/" aria-label="數位同事首頁">
-            <Avatar className="brand-mark" icon={<TeamOutlined />} />
+            <Avatar
+              className="brand-mark"
+              src="/favicon.svg"
+              alt="Ada"
+            />
             <span>
               <strong className="brand-name">Ada</strong>
               <small className="brand-descriptor">你的數位同事</small>

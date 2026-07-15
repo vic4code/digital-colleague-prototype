@@ -61,8 +61,8 @@ textarea:focus-visible {
   text-decoration: none;
 }
 .brand-mark.ant-avatar {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--border);
 }
 .brand > span:last-child {
   display: grid;
