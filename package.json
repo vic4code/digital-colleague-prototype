@@ -18,7 +18,7 @@
     "dev:web": "vite --config web/vite.config.ts",
     "start": "node dist/cli.js",
     "test": "npm run test:api && npm run test:web",
-    "test:api": "vitest run --environment node src/http src/runtime",
+    "test:api": "vitest run --environment node src/events src/http src/runtime",
     "test:web": "vitest run --config web/vite.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
