@@ -207,10 +207,18 @@ function requestedSpecs(text: string): ConnectorSpec[] {
   if (outlook && calendar) selected.add("outlook-calendar");
   if (!outlook && email) selected.add("gmail");
   if (!outlook && calendar) selected.add("google-calendar");
-  if (/\b(?:microsoft\s+)?teams\b|\bplanner\b|Teams\s*(?:訊息|聊天|頻道|會議)/i.test(text)) {
+  if (
+    /\b(?:microsoft\s+)?teams\b|\bplanner\b|Teams\s*(?:訊息|聊天|頻道|會議)/i.test(
+      text,
+    )
+  ) {
     selected.add("teams");
   }
-  if (/\bsharepoint\b|\bone\s*drive\b|\bonedrive\b|SharePoint|OneDrive/i.test(text)) {
+  if (
+    /\bsharepoint\b|\bone\s*drive\b|\bonedrive\b|SharePoint|OneDrive/i.test(
+      text,
+    )
+  ) {
     selected.add("sharepoint");
   }
   if (/\bslack\b/i.test(text)) selected.add("slack");
@@ -251,7 +259,9 @@ function m365WorkflowSkill(text: string): string | undefined {
 
 function requestedWorkspaceSpecs(text: string): ConnectorSpec[] {
   const workflow = m365WorkflowSkill(text);
-  return workflow ? [M365_WORKFLOW, ...requestedSpecs(text)] : requestedSpecs(text);
+  return workflow
+    ? [M365_WORKFLOW, ...requestedSpecs(text)]
+    : requestedSpecs(text);
 }
 
 function preferredSkillSuffixes(pluginName: string, text: string): string[] {

@@ -1,8 +1,8 @@
 # Digital Colleague Prototype
 
 > A **deployable** prototype of a *digital colleague* — an LLM agent with a
-> persistent **Person**, **Soul**, and **Info** (real accounts such as **Gmail**
-> or **Outlook**, calendars, **Slack**, and **Notion**) — built in the spirit of
+> persistent **Person**, **Soul**, and **Info** (real accounts such as **Gmail**,
+> **Microsoft 365**, **Slack**, and **Notion**) — built in the spirit of
 > [**digital-colleagues-architecture**](https://github.com/vic4code/digital-colleagues-architecture)
 > informed by the [**OpenClaw**](https://github.com/openclaw/openclaw) workspace
 > model, with **Codex-native plugins, connectors, and Automations** as the Phase 0
@@ -107,9 +107,10 @@ channels:
 ```
 
 > **🔒 Secrets never live in git.** Phase 0 workspace access uses the official
-> Gmail or Outlook Email, Google Calendar or Outlook Calendar, Notion, and
-> Slack plugins. Their OAuth sessions stay in Codex/ChatGPT and are never
-> copied into `info.yaml`, an environment file, or the repository.
+> Gmail or Outlook Email, Google Calendar or Outlook Calendar, Teams,
+> SharePoint/OneDrive, Notion, and Slack plugins. Their OAuth sessions stay in
+> Codex/ChatGPT and are never copied into `info.yaml`, an environment file, or
+> the repository.
 
 Plus two supporting planes: **Memory** (`memory/log.jsonl` — facts and prior
 decisions across sessions) and **Skills** (`skills/<name>/SKILL.md` — bundled
@@ -378,6 +379,7 @@ codex plugin add digital-colleague-core@digital-colleague-prototype
 codex plugin add digital-colleague-builder@digital-colleague-prototype
 codex plugin add digital-colleague-web@digital-colleague-prototype
 codex plugin add digital-colleague-workspace@digital-colleague-prototype
+codex plugin add digital-colleague-m365@digital-colleague-prototype
 codex plugin list
 ```
 
@@ -391,6 +393,35 @@ prompts live under
 `plugins/digital-colleague-workspace/resources/schedule-prompts/`; schedules
 themselves remain visible, revocable user/workspace state rather than plugin
 manifest data.
+
+For the complete Microsoft 365 workspace, install the four official OpenAI
+plugins plus this repository's credential-free orchestration plugin:
+
+```bash
+codex plugin add outlook-email@openai-curated
+codex plugin add outlook-calendar@openai-curated
+codex plugin add teams@openai-curated
+codex plugin add sharepoint@openai-curated
+codex plugin add digital-colleague-m365@digital-colleague-prototype
+codex plugin list
+```
+
+Then connect each Microsoft account in the Codex/ChatGPT Apps settings. Plugin
+installation, app enablement, and account accessibility are separate states;
+`codex plugin list` proves only the first two. OneDrive content is provided by
+the official SharePoint integration, while Planner tasks are provided by the
+official Teams integration—there is no separate OneDrive or Planner plugin to
+install. Tenant administrators may also need to permit the apps or grant Entra
+permissions.
+
+Use `$m365-workspace-setup` to check the four connections without reading
+business content. Once connected, `$m365-daily-brief`,
+`$m365-meeting-followup`, and `$m365-document-workspace` coordinate bounded
+work across the official connectors. Scheduled prompts remain read-only;
+sending mail or Teams messages, changing calendar events or Planner tasks, and
+moving or sharing files require fresh interactive approval. See the
+[M365 capability matrix](plugins/digital-colleague-m365/resources/capability-matrix.md)
+for the exact ownership and safety boundaries.
 
 `ada-legal-ops` is the example domain plugin and stays optional:
 
@@ -449,7 +480,7 @@ flowchart TB
     Gateway --> Runtime[Codex runtime adapter<br/>CodexAppServerRuntime]
     Runtime <--> Codex[Codex app-server<br/>thread + turn lifecycle]
     Codex <--> Tools[Official Codex plugins / MCP tools]
-    Tools <--> Services[Gmail · Outlook · Calendar<br/>Slack · Notion · other services]
+    Tools <--> Services[Gmail · Outlook · Calendar · Teams<br/>SharePoint · OneDrive · Slack · Notion]
     Services -. provider events .-> OpenClaw[Optional OpenClaw ingress]
     OpenClaw -. Codex harness .-> Codex
 ```
@@ -468,13 +499,13 @@ and a successful human/colleague exchange is appended to memory together.
 | **Soul** | [`SOUL.md`](colleagues/ada/SOUL.md) defines Ada's voice, values, boundaries, and escalation behavior. | Implemented |
 | **Body** | [`person.yaml`](colleagues/ada/person.yaml) provides stable organizational identity; [`ColleaguePresence.tsx`](web/src/ColleaguePresence.tsx) renders her presence in the UI. | Implemented |
 | **Faculty** | [`prompt.ts`](src/runtime/prompt.ts), [`memory.ts`](src/runtime/memory.ts), and the runtime adapter provide reasoning context and bounded thread recall. | Implemented for local threads |
-| **Skills** | Colleague-local skills live under [`colleagues/ada/skills/`](colleagues/ada/skills/); reusable workspace skills live in [`plugins/digital-colleague-workspace/`](plugins/digital-colleague-workspace/). | Implemented |
+| **Skills** | Colleague-local skills live under [`colleagues/ada/skills/`](colleagues/ada/skills/); reusable workspace and M365 orchestration skills live in [`plugins/digital-colleague-workspace/`](plugins/digital-colleague-workspace/) and [`plugins/digital-colleague-m365/`](plugins/digital-colleague-m365/). | Implemented |
 | **Runtime Controller** | [`StandaloneGateway`](src/gateway/standalone.ts), the colleague [`loader`](src/colleague/loader.ts), and [`native-workspace.ts`](src/runtime/native-workspace.ts) own dispatch, persona loading, per-thread serialization, and runtime capability context. | Implemented as one Node process |
 | **Codex app-server** | [`codex-app-server.ts`](src/runtime/codex-app-server.ts) owns initialization plus thread/turn lifecycle over the native stdio protocol. | Implemented through the official Codex runtime |
 | **Event ingress** | [`deploy/openclaw/`](deploy/openclaw/) provides the optional, pinned webhook/channel profile for provider events when no frontend is open. | Optional profile; provider setup still required |
 | **Scheduler** | Reusable prompts are under [`resources/schedule-prompts/`](plugins/digital-colleague-workspace/resources/schedule-prompts/); actual schedules remain visible and revocable in Codex Scheduled Tasks. | Runtime-provided, not a repo scheduler |
 | **Runtime triage policy** | The OpenClaw profile uses fixed routes, allowlists, bounded payloads, and read-only event-worker rules before invoking Codex. | Implemented for the optional event profile |
-| **MCP tool servers** | Gmail, Outlook, Calendar, Slack, and Notion access is provided by official Codex/ChatGPT plugins and their OAuth sessions, rather than reimplemented adapters holding tokens in this repo. | External capability; install and OAuth required |
+| **MCP tool servers** | Gmail, Outlook Email/Calendar, Teams, SharePoint/OneDrive, Slack, and Notion access is provided by official Codex/ChatGPT plugins and their OAuth sessions, rather than reimplemented adapters holding tokens in this repo. Planner is exposed through Teams. | External capability; install and OAuth required |
 | **Access · permissions · audit** | The local API is loopback-only and enforces origin, payload, concurrency, timeout, and stable-error boundaries. Credentials stay outside colleague files; Codex owns action approvals. Conversation memory is auditable, while full event-to-tool-action provenance depends on the optional gateway/runtime audit surface. | Implemented in layers; full end-to-end audit is not claimed |
 
 This mapping is intentionally explicit about ownership: orange/persona work is

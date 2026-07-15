@@ -68,4 +68,25 @@ describe("Codex plugin marketplace packaging", () => {
       }
     }
   });
+
+  it("maps the Microsoft 365 suite to official connectors", () => {
+    const matrix = readFileSync(
+      join(
+        repoRoot,
+        "plugins/digital-colleague-m365/resources/capability-matrix.md",
+      ),
+      "utf8",
+    );
+
+    expect(matrix).toContain("`outlook-email@openai-curated`");
+    expect(matrix).toContain("`outlook-calendar@openai-curated`");
+    expect(matrix).toContain("`teams@openai-curated`");
+    expect(matrix).toContain("`sharepoint@openai-curated`");
+    expect(matrix).toContain("OneDrive");
+    expect(matrix).toContain("Planner");
+    expect(matrix).toContain(
+      "There is no separate official `onedrive@openai-curated` plugin",
+    );
+    expect(matrix).not.toContain("`planner@openai-curated`");
+  });
 });
