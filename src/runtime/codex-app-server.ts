@@ -17,7 +17,7 @@ import {
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
-const WORKSPACE_SNAPSHOT_TTL_MS = 15_000;
+const WORKSPACE_SNAPSHOT_TTL_MS = 5 * 60_000;
 
 type ErrorCode =
   | "CLOSED"
@@ -324,6 +324,11 @@ class CodexAppServerClient {
       capabilities: {
         experimentalApi: true,
         requestAttestation: false,
+        optOutNotificationMethods: [
+          "item/reasoning/textDelta",
+          "item/reasoning/summaryTextDelta",
+          "item/reasoning/summaryPartAdded",
+        ],
       },
     });
     this.write({ method: "initialized" });

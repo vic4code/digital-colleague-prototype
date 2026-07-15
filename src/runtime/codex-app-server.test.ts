@@ -244,6 +244,7 @@ describe("CodexAppServerRuntime", () => {
   });
 
   it("uses the native initialize, thread/start and turn/start protocol", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let turnNumber = 0;
     const server = new FakeAppServer((message, fake) => {
       if (replyToHandshakeAndThread(message, fake)) return;
@@ -291,9 +292,11 @@ describe("CodexAppServerRuntime", () => {
     await expect(
       runtime.respond(colleague, history, turn("幫我看看最近有哪些信需要處理")),
     ).resolves.toEqual({ text: "Hello Chris." });
+    now.mockReturnValue(16_001);
     await expect(
       runtime.respond(colleague, history, turn("再看看還有哪些信需要處理")),
     ).resolves.toEqual({ text: "Still here." });
+    now.mockRestore();
 
     const initialize = server.messages.find((message) => message.method === "initialize");
     expect(initialize?.params).toEqual({
@@ -305,6 +308,11 @@ describe("CodexAppServerRuntime", () => {
       capabilities: {
         experimentalApi: true,
         requestAttestation: false,
+        optOutNotificationMethods: [
+          "item/reasoning/textDelta",
+          "item/reasoning/summaryTextDelta",
+          "item/reasoning/summaryPartAdded",
+        ],
       },
     });
     expect(server.messages.some((message) => message.method === "initialized")).toBe(true);
