@@ -1,31 +1,51 @@
 {
   "name": "digital-colleague-prototype",
   "version": "0.1.0",
-  "description": "A deployable prototype of a digital colleague — an LLM agent with a persistent Person, Soul, and Info (accounts like Gmail & Slack), built in the spirit of the digital-colleagues-architecture and on top of the OpenClaw framework model.",
+  "description": "A deployable, Codex-native prototype of one digital colleague with persistent Person, Soul, Info, skills, connectors, and reviewable Automations.",
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.19.0"
   },
   "bin": {
     "dcolleague": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "node --loader tsx --no-warnings src/cli.ts",
+    "build:web": "vite build --config web/vite.config.ts",
+    "dev": "tsx src/cli.ts",
+    "dev:api": "tsx src/cli.ts serve --colleague ./colleagues/ada --runtime codex",
+    "dev:web": "vite --config web/vite.config.ts",
     "start": "node dist/cli.js",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "vitest run --environment node src/http src/runtime",
+    "test:web": "vitest run --config web/vite.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
     "run:ada": "npm run build && node dist/cli.js run --colleague ./colleagues/ada --channel console",
+    "serve:ada": "npm run build && node dist/cli.js serve --colleague ./colleagues/ada --runtime codex",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
+    "lucide-react": "^1.24.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "yaml": "^2.5.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20.14.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^29.1.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
   }
 }

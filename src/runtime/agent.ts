@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
 import type { Colleague, Turn, Reply } from "../colleague/types.js";
 import type { MemoryEntry } from "./memory.js";
-import { buildTurnPrompt } from "./prompt.js";
+import { CodexAppServerRuntime } from "./codex-app-server.js";
 
 /**
  * AgentRuntime is the "brain" boundary. The architecture repo names the
@@ -17,65 +16,7 @@ export interface AgentRuntime {
     history: MemoryEntry[],
     turn: Turn,
   ): Promise<Reply>;
-}
-
-/**
- * CodexRuntime — binds to the Codex CLI / app-server (the runtime called out
- * by name in the glossary). It shells to `$CODEX_BIN exec` with the assembled
- * prompt on stdin. This is deliberately thin: the prototype's value is the
- * platform layer around the runtime, not the runtime itself.
- *
- * Contract assumed: `codex exec --model <m>` reads a prompt from stdin and
- * writes the agent's reply to stdout. Adjust `buildArgs` to match your local
- * Codex build if its flags differ.
- */
-export class CodexRuntime implements AgentRuntime {
-  readonly name = "codex";
-  constructor(
-    private readonly bin = process.env.CODEX_BIN || "codex",
-    private readonly model = process.env.CODEX_MODEL || "gpt-5-codex",
-  ) {}
-
-  private buildArgs(): string[] {
-    return ["exec", "--model", this.model];
-  }
-
-  async respond(
-    colleague: Colleague,
-    history: MemoryEntry[],
-    turn: Turn,
-  ): Promise<Reply> {
-    const { system, user } = buildTurnPrompt(colleague, history, turn);
-    const prompt = `${system}\n\n---\n\n${user}\n`;
-    const out = await this.exec(prompt);
-    return { text: out.trim() || "(no output from codex runtime)" };
-  }
-
-  private exec(input: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(this.bin, this.buildArgs(), {
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (d) => (stdout += d.toString()));
-      child.stderr.on("data", (d) => (stderr += d.toString()));
-      child.on("error", (err) =>
-        reject(
-          new Error(
-            `Failed to launch Codex runtime "${this.bin}": ${err.message}. ` +
-              `Set CODEX_BIN, or use DC_AGENT_RUNTIME=echo for offline runs.`,
-          ),
-        ),
-      );
-      child.on("close", (code) => {
-        if (code === 0) resolve(stdout);
-        else reject(new Error(`Codex runtime exited ${code}: ${stderr}`));
-      });
-      child.stdin.write(input);
-      child.stdin.end();
-    });
-  }
+  close?(): Promise<void>;
 }
 
 /**
@@ -105,7 +46,7 @@ export function makeRuntime(kind?: string): AgentRuntime {
   const k = (kind || process.env.DC_AGENT_RUNTIME || "echo").toLowerCase();
   switch (k) {
     case "codex":
-      return new CodexRuntime();
+      return new CodexAppServerRuntime();
     case "echo":
       return new EchoRuntime();
     case "claude-code":

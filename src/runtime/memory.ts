@@ -28,6 +28,15 @@ export class MemoryStore {
     appendFileSync(this.file, JSON.stringify(entry) + "\n", "utf8");
   }
 
+  appendMany(entries: MemoryEntry[]): void {
+    if (entries.length === 0) return;
+    appendFileSync(
+      this.file,
+      entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+      "utf8",
+    );
+  }
+
   /** Recent turns for a thread, oldest-first, capped at `limit`. */
   recall(threadId: string, limit = 20): MemoryEntry[] {
     if (!existsSync(this.file)) return [];

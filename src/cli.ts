@@ -6,6 +6,7 @@ import { buildSystemPrompt } from "./runtime/prompt.js";
 import { resolveAccount } from "./runtime/secrets.js";
 import { StandaloneGateway } from "./gateway/standalone.js";
 import { DistributedGateway } from "./gateway/distributed.js";
+import { createTurnServer } from "./http/server.js";
 
 const program = new Command();
 
@@ -38,6 +39,50 @@ program
       return;
     }
     await new StandaloneGateway(colleague, { runtime: opts.runtime, channels }).run();
+  });
+
+program
+  .command("serve")
+  .description("Serve the local web turn API using Codex app-server.")
+  .requiredOption("-c, --colleague <dir>", "path to the colleague directory")
+  .option("-r, --runtime <kind>", "agent runtime: codex | echo", "codex")
+  .option("-p, --port <number>", "localhost port", "8787")
+  .action(async (opts) => {
+    const port = Number.parseInt(String(opts.port), 10);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error(`Invalid port: ${opts.port}`);
+    }
+
+    const colleague = loadColleague(opts.colleague);
+    const gateway = new StandaloneGateway(colleague, { runtime: opts.runtime });
+    const server = createTurnServer({
+      dispatch: gateway.dispatch,
+      colleague: { id: colleague.person.id, name: colleague.person.name },
+      runtime: gateway.runtimeName,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "127.0.0.1", () => {
+        server.off("error", reject);
+        console.log(
+          `[web] ${colleague.person.name} listening on http://127.0.0.1:${port} ` +
+            `(${gateway.runtimeName})`,
+        );
+        resolve();
+      });
+    });
+
+    let shuttingDown = false;
+    const shutdown = () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      server.close(() => {
+        void gateway.close().finally(() => process.exit(0));
+      });
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
   });
 
 program

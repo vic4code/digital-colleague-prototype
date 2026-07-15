@@ -24,33 +24,61 @@ export interface GatewayOptions {
 export class StandaloneGateway {
   private readonly runtime: AgentRuntime;
   private readonly memory: MemoryStore;
+  private readonly threadQueues = new Map<string, Promise<void>>();
 
   constructor(private readonly colleague: Colleague, private readonly opts: GatewayOptions = {}) {
     this.runtime = makeRuntime(opts.runtime);
     this.memory = new MemoryStore(colleague.dir);
   }
 
+  get runtimeName(): string {
+    return this.runtime.name;
+  }
+
+  async close(): Promise<void> {
+    await this.runtime.close?.();
+  }
+
   /** The single dispatch path every channel funnels a Turn through. */
-  private handle = async (turn: Turn): Promise<Reply> => {
+  dispatch = (turn: Turn): Promise<Reply> => {
+    const previous = this.threadQueues.get(turn.threadId) ?? Promise.resolve();
+    const result = previous.catch(() => {}).then(() => this.handleTurn(turn));
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.threadQueues.set(turn.threadId, settled);
+    void settled.finally(() => {
+      if (this.threadQueues.get(turn.threadId) === settled) {
+        this.threadQueues.delete(turn.threadId);
+      }
+    });
+    return result;
+  };
+
+  private handleTurn = async (turn: Turn): Promise<Reply> => {
     // Recall thread history (memory plane).
     const history = this.memory.recall(turn.threadId);
-    this.memory.append({
-      at: turn.at,
-      threadId: turn.threadId,
-      role: "human",
-      text: turn.text,
-    });
 
     // Execute the turn (execution plane).
     const reply = await this.runtime.respond(this.colleague, history, turn);
 
-    // Persist the colleague's reply (memory plane).
-    this.memory.append({
-      at: new Date().toISOString(),
-      threadId: turn.threadId,
-      role: "colleague",
-      text: reply.text,
-    });
+    // Persist a complete exchange together. Failed runtime calls leave no
+    // orphaned human message that would confuse the next turn.
+    this.memory.appendMany([
+      {
+        at: turn.at,
+        threadId: turn.threadId,
+        role: "human",
+        text: turn.text,
+      },
+      {
+        at: new Date().toISOString(),
+        threadId: turn.threadId,
+        role: "colleague",
+        text: reply.text,
+      },
+    ]);
     return reply;
   };
 
@@ -74,6 +102,7 @@ export class StandaloneGateway {
 
     const shutdown = async () => {
       await Promise.all(channels.map(({ ch }) => ch.stop().catch(() => {})));
+      await this.close().catch(() => {});
       process.exit(0);
     };
     process.on("SIGINT", shutdown);
@@ -81,7 +110,7 @@ export class StandaloneGateway {
 
     // Start every selected channel; they share one dispatch path.
     await Promise.all(
-      channels.map(({ ch, binding }) => ch.start(this.colleague, binding, this.handle)),
+      channels.map(({ ch, binding }) => ch.start(this.colleague, binding, this.dispatch)),
     );
   }
 }

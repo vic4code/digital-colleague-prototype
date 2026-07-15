@@ -1,8 +1,16 @@
 node_modules/
 dist/
+dist-web/
+.playwright-cli/
+output/
 *.log
 .env
 .env.local
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
 
 # Local colleague state (memory, secrets materialized at runtime)
 .state/
