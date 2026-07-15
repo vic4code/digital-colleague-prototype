@@ -358,7 +358,13 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
           sendError(response, 422, "INVALID_LOGIN", "Choose a supported Codex login flow.");
           return;
         }
-        sendJson(response, 200, { data: await options.account.startLogin(body.type) });
+        let login: RuntimeLoginStart;
+        try {
+          login = await options.account.startLogin(body.type);
+        } catch {
+          throw new HttpError(502, "LOGIN_FAILED", "Codex login could not start.");
+        }
+        sendJson(response, 200, { data: login });
         return;
       }
 

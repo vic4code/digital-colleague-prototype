@@ -211,7 +211,8 @@ Never:
   Codex and appears in an already-open browser without refresh.
 - Re-sending the same `eventId` does not create a second UI notice.
 - Dropping and restoring the API moves the UI through `reconnecting` and back to
-  `ready`, with no console error loop and no lost buffered event.
+  `ready`, with no console error loop. Events already delivered to the open page
+  remain visible; process-restart durability is explicitly not claimed.
 - A concurrent turn returns a visible `busy` state, not `offline`.
 - API and web tests, typechecks, builds, and real-browser checks pass.
 - Documentation clearly distinguishes provider ingress, OpenClaw relay, Codex
@@ -229,12 +230,11 @@ One app-server process represents one Codex account. Per-user deployment means
 one isolated process and Codex home per OS user/container/session. A shared
 process cannot safely provide independent browser-user Codex identities.
 
-## Open questions
+## Resolved first-release decisions
 
-1. Should provider events automatically start a read-only Codex triage turn, or
-   should the first release require the user to click "交給 Ada"?
-2. Is in-app delivery while the page is open sufficient for the first release,
-   or should the same change also add Web Push for page-closed notifications?
+- Provider events do not start a Codex turn automatically. The user clicks
+  **交給 Ada** before execution.
+- Delivery is in-app while the page is open. Web Push remains a later scope.
 
 ## Official sources
 

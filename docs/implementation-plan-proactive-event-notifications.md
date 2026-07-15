@@ -67,7 +67,8 @@ Acceptance:
 
 - `GET /api/v1/events/stream` emits ready, notification, retry, and heartbeat.
 - Disconnect removes the subscriber and does not leak listeners.
-- Reconnect can recover recent events through the replay endpoint.
+- A network reconnect to the same process can recover recent events through the
+  replay endpoint; process-restart durability is out of scope.
 
 Verify:
 
@@ -111,7 +112,8 @@ Acceptance:
 
 - Client preserves structured API error codes.
 - `RUNTIME_BUSY` displays busy and keeps the API online.
-- Health retry uses bounded backoff and restores ready state.
+- A low-frequency health monitor forces stale proxy streams to reconnect and
+  restores ready state only after the event stream is ready.
 - Event SSE failure displays reconnecting without blocking chat.
 
 Verify:

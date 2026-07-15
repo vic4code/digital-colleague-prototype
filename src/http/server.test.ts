@@ -175,6 +175,17 @@ describe("localhost turn API", () => {
     expect(startLogin).toHaveBeenCalledWith("chatgpt");
     expect(rejectedSecret.status).toBe(422);
     expect(startLogin).toHaveBeenCalledTimes(1);
+
+    startLogin.mockRejectedValueOnce(new Error("secret app-server diagnostic"));
+    const failed = await fetch(`${url}/api/v1/runtime/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "chatgpt" }),
+    });
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toEqual({
+      error: { code: "LOGIN_FAILED", message: "Codex login could not start." },
+    });
   });
 
   it("normalizes a browser message into a Turn and returns Ada's reply", async () => {
