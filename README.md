@@ -135,7 +135,8 @@ the loopback API, and the API keeps a native Codex app-server thread for Ada.
 ### Prerequisites
 
 - Node.js **20.19 or newer** and npm
-- [Codex CLI](https://developers.openai.com/codex/cli/) installed and signed in
+- [Codex CLI](https://developers.openai.com/codex/cli/) installed; sign-in can
+  be completed before startup or from Ada's web onboarding
 - macOS, Linux, or Windows with two terminal windows available
 
 Check the local tools before installing the project:
@@ -147,7 +148,8 @@ codex --version
 codex login status
 ```
 
-If Codex is not signed in, run `codex login` and finish the browser sign-in.
+If Codex is not signed in, either run `codex login` or start Ada and use the
+official account prompt in the web UI.
 
 ### Install
 
@@ -188,6 +190,24 @@ npm run dev:web
 Open **http://127.0.0.1:5173/** and send Ada a message. Vite proxies browser
 requests under `/api` to the local API on port `8787`, so no browser-side Codex
 credentials are required. Stop either development server with `Ctrl+C`.
+
+### Codex account onboarding
+
+When the official app-server reports that authentication is required, Ada opens
+an account dialog once per browser session—even if Codex already has an account—
+so the user must confirm the displayed identity or switch away from an inherited
+shared account. **使用 ChatGPT 登入** starts Codex's managed browser OAuth
+flow; **使用裝置驗證碼** starts its device-code flow. The frontend only receives
+the authorization URL, login ID, or one-time device code. Passwords, access
+tokens, and API keys are never accepted by this HTTP API. After authorization,
+Ada polls `account/read` until Codex confirms the account.
+
+The account button in the top bar shows which Codex account the runtime is
+using and can start a switch. This is deliberately a **one OS user / container
+/ Codex home per deployment** design: one shared `codex app-server` process has
+one active account. A multi-user installation must create an isolated runtime
+and `CODEX_HOME` (and memory directory) per signed-in user; do not point several
+browser users at one app-server and call that per-user authentication.
 
 ### Offline CLI smoke test
 
@@ -290,7 +310,8 @@ state use the `ada-memory` and `ada-codex` volumes. The process runs as UID/GID
 `10001`, drops Linux capabilities, and uses a read-only root filesystem.
 
 For a local Codex deployment, authenticate the container once into its named
-volume, then switch the runtime:
+volume, then switch the runtime. You can start `DC_AGENT_RUNTIME=codex` first
+and use Ada's browser/device-code account dialog, or use the CLI explicitly:
 
 ```bash
 # API-key login; the key is read from stdin and is not baked into the image.
@@ -303,6 +324,8 @@ DC_AGENT_RUNTIME=codex docker compose up -d ada
 `codex login --device-auth` can be used through the same one-off container for
 an interactive developer login. For unattended production, use the deployment
 platform's secret manager instead of copying a developer's entire `~/.codex`.
+Give each deployed user a separate Codex state volume; sharing `ada-codex`
+shares the active Codex account.
 
 Stop the service with `docker compose down`. Named volumes are preserved;
 `docker compose down -v` deliberately deletes memory and Codex state.

@@ -11,6 +11,7 @@ import {
   BellOutlined,
   CheckCircleOutlined,
   SendOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import {
   Avatar,
@@ -18,6 +19,7 @@ import {
   Button,
   ConfigProvider,
   Input,
+  Modal,
   Popover,
   Tooltip,
   notification,
@@ -28,9 +30,13 @@ import {
   ApiError,
   getHealth,
   getProactiveEvents,
+  getRuntimeAccount,
   postTurn,
+  startRuntimeLogin,
   subscribeToProactiveEvents,
   type ProactiveEvent,
+  type RuntimeAccountStatus,
+  type RuntimeLoginStart,
 } from "./api";
 import {
   ColleaguePresence,
@@ -92,6 +98,13 @@ const eventSourceLabels: Record<ProactiveEvent["source"], string> = {
   system: "系統",
 };
 
+const ACCOUNT_CONFIRMATION_KEY = "digital-colleague-account-confirmed";
+
+function accountIdentity(status: RuntimeAccountStatus): string | undefined {
+  if (!status.account) return undefined;
+  return status.account.email ?? status.account.type;
+}
+
 function sourceLabel(source: ProactiveEvent["source"]): string {
   return eventSourceLabels[source];
 }
@@ -113,6 +126,11 @@ export function App({ voiceSupported = false }: AppProps) {
   const [proactiveEvents, setProactiveEvents] = useState<ProactiveEvent[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [latestAnnouncement, setLatestAnnouncement] = useState("");
+  const [runtimeAccount, setRuntimeAccount] = useState<RuntimeAccountStatus>();
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [loginStart, setLoginStart] = useState<RuntimeLoginStart>();
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const seenEventIdsRef = useRef(new Set<string>());
   const messageListRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<TextAreaRef>(null);
@@ -139,6 +157,58 @@ export function App({ voiceSupported = false }: AppProps) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void getRuntimeAccount().then(
+      (status) => {
+        if (!active) return;
+        setRuntimeAccount(status);
+        if (status.available && status.requiresOpenaiAuth) {
+          const identity = accountIdentity(status);
+          let confirmed: string | null = null;
+          try {
+            confirmed = sessionStorage.getItem(ACCOUNT_CONFIRMATION_KEY);
+          } catch {
+            // If session storage is unavailable, show the safe account choice.
+          }
+          if (!identity || confirmed !== identity) setAccountDialogOpen(true);
+        }
+      },
+      () => {
+        // Older/echo deployments can keep using chat without account onboarding.
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loginStart) return;
+    const timer = window.setInterval(() => {
+      void getRuntimeAccount().then(
+        (status) => {
+          setRuntimeAccount(status);
+          if (status.account) {
+            const identity = accountIdentity(status);
+            if (identity) {
+              try {
+                sessionStorage.setItem(ACCOUNT_CONFIRMATION_KEY, identity);
+              } catch {
+                // Account switching still succeeds without browser storage.
+              }
+            }
+            setAccountDialogOpen(false);
+            setLoginStart(undefined);
+            setLoginError("");
+          }
+        },
+        () => undefined,
+      );
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [loginStart]);
 
   useEffect(() => {
     let active = true;
@@ -220,6 +290,28 @@ export function App({ voiceSupported = false }: AppProps) {
   });
 
   const canSend = draft.trim().length > 0 && !voice.isBusy && !isSending;
+
+  async function beginRuntimeLogin(type: "chatgpt" | "chatgptDeviceCode") {
+    const popup = window.open("about:blank", "_blank");
+    setLoginBusy(true);
+    setLoginError("");
+    try {
+      const result = await startRuntimeLogin(type);
+      const destination = result.type === "chatgpt" ? result.authUrl : result.verificationUrl;
+      const url = new URL(destination);
+      if (url.protocol !== "https:") throw new Error("登入網址不安全，已停止開啟。");
+      if (popup) {
+        popup.opener = null;
+        popup.location.href = url.toString();
+      }
+      setLoginStart(result);
+    } catch (error) {
+      popup?.close();
+      setLoginError(error instanceof Error ? error.message : "目前無法開始 Codex 登入。");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
 
   async function sendMessage(event?: FormEvent) {
     event?.preventDefault();
@@ -454,6 +546,24 @@ export function App({ voiceSupported = false }: AppProps) {
                 />
               </Badge>
             </Popover>
+            {runtimeAccount?.available && (
+              <Tooltip
+                title={runtimeAccount.account?.email ?? "Codex 帳號"}
+              >
+                <Button
+                  className="account-button"
+                  type="text"
+                  shape="circle"
+                  icon={<UserOutlined />}
+                  aria-label={
+                    runtimeAccount.account
+                      ? `Codex 帳號：${runtimeAccount.account.email ?? runtimeAccount.account.type}`
+                      : "連接 Codex 帳號"
+                  }
+                  onClick={() => setAccountDialogOpen(true)}
+                />
+              </Tooltip>
+            )}
             <div className={`runtime-pill ${runtimeStatus}`} role="status">
               <span aria-hidden="true" />
               {runtimeStatus === "ready"
@@ -605,6 +715,75 @@ export function App({ voiceSupported = false }: AppProps) {
           </section>
         </main>
       </div>
+      <Modal
+        title="連接你的 Codex 帳號"
+        open={accountDialogOpen}
+        footer={null}
+        mask={{ closable: false }}
+        onCancel={() => setAccountDialogOpen(false)}
+      >
+        <div className="account-onboarding">
+          {runtimeAccount?.account ? (
+            <p>
+              目前已連接 <strong>{runtimeAccount.account.email ?? runtimeAccount.account.type}</strong>。
+              若這是共用帳號，請切換成你自己的帳號。
+            </p>
+          ) : (
+            <p>
+              Ada 會透過本機 Codex app-server 工作。請使用你自己的 ChatGPT / Codex
+              帳號登入；Ada 不會取得你的密碼或原始 token。
+            </p>
+          )}
+          {loginStart?.type === "chatgptDeviceCode" && (
+            <div className="device-code">
+              <span>裝置驗證碼</span>
+              <strong>{loginStart.userCode}</strong>
+            </div>
+          )}
+          {loginStart && (
+            <p className="login-progress" role="status">
+              完成登入後，Ada 會自動確認連線狀態。
+            </p>
+          )}
+          {loginError && <p className="login-error" role="alert">{loginError}</p>}
+          <div className="account-actions">
+            {runtimeAccount?.account && (
+              <Button
+                type="primary"
+                onClick={() => {
+                  const identity = accountIdentity(runtimeAccount);
+                  if (identity) {
+                    try {
+                      sessionStorage.setItem(ACCOUNT_CONFIRMATION_KEY, identity);
+                    } catch {
+                      // Closing the dialog remains available without storage.
+                    }
+                  }
+                  setAccountDialogOpen(false);
+                }}
+              >
+                使用此帳號
+              </Button>
+            )}
+            <Button
+              type={runtimeAccount?.account ? "default" : "primary"}
+              loading={loginBusy}
+              onClick={() => void beginRuntimeLogin("chatgpt")}
+            >
+              {runtimeAccount?.account ? "切換 ChatGPT 帳號" : "使用 ChatGPT 登入"}
+            </Button>
+            <Button
+              disabled={loginBusy}
+              onClick={() => void beginRuntimeLogin("chatgptDeviceCode")}
+            >
+              使用裝置驗證碼
+            </Button>
+            <Button type="text" onClick={() => setAccountDialogOpen(false)}>
+              稍後再說
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </ConfigProvider>
   );
 }

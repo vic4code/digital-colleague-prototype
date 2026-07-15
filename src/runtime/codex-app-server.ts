@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { Colleague, Reply, Turn } from "../colleague/types.js";
-import type { AgentRuntime } from "./agent.js";
+import type {
+  AgentRuntime,
+  RuntimeAccountStatus,
+  RuntimeLoginStart,
+  RuntimeLoginType,
+} from "./agent.js";
 import type { MemoryEntry } from "./memory.js";
 import {
   buildNativeWorkspaceSnapshot,
@@ -120,6 +125,11 @@ interface ThreadStartResult {
 
 interface TurnStartResult {
   turn?: { id?: unknown };
+}
+
+interface AccountReadResult {
+  account?: unknown;
+  requiresOpenaiAuth?: unknown;
 }
 
 interface SkillsListResult {
@@ -827,6 +837,86 @@ export class CodexAppServerRuntime implements AgentRuntime {
     } finally {
       if (this.queues.get(key) === settled) this.queues.delete(key);
     }
+  }
+
+  async readAccount(): Promise<RuntimeAccountStatus> {
+    const result = await this.client.request<AccountReadResult>("account/read", {
+      refreshToken: false,
+    });
+    if (typeof result.requiresOpenaiAuth !== "boolean") {
+      throw new CodexAppServerError(
+        "PROTOCOL_ERROR",
+        "Codex app-server returned an invalid account status.",
+      );
+    }
+    if (result.account === null) {
+      return {
+        available: true,
+        requiresOpenaiAuth: result.requiresOpenaiAuth,
+        account: null,
+      };
+    }
+    if (!isRecord(result.account) || typeof result.account.type !== "string") {
+      throw new CodexAppServerError(
+        "PROTOCOL_ERROR",
+        "Codex app-server returned an invalid account.",
+      );
+    }
+    const type = result.account.type;
+    if (type !== "apiKey" && type !== "chatgpt" && type !== "amazonBedrock") {
+      throw new CodexAppServerError(
+        "PROTOCOL_ERROR",
+        "Codex app-server returned an unsupported account type.",
+      );
+    }
+    return {
+      available: true,
+      requiresOpenaiAuth: result.requiresOpenaiAuth,
+      account: {
+        type,
+        ...(type === "chatgpt" && typeof result.account.email === "string"
+          ? { email: result.account.email }
+          : {}),
+      },
+    };
+  }
+
+  async startLogin(type: RuntimeLoginType): Promise<RuntimeLoginStart> {
+    const params =
+      type === "chatgpt"
+        ? {
+            type,
+            codexStreamlinedLogin: true,
+            useHostedLoginSuccessPage: true,
+            appBrand: "codex",
+          }
+        : { type };
+    const result = await this.client.request<unknown>("account/login/start", params);
+    if (!isRecord(result) || result.type !== type || typeof result.loginId !== "string") {
+      throw new CodexAppServerError(
+        "PROTOCOL_ERROR",
+        "Codex app-server returned an invalid login response.",
+      );
+    }
+    if (type === "chatgpt" && typeof result.authUrl === "string") {
+      return { type, loginId: result.loginId, authUrl: result.authUrl };
+    }
+    if (
+      type === "chatgptDeviceCode" &&
+      typeof result.verificationUrl === "string" &&
+      typeof result.userCode === "string"
+    ) {
+      return {
+        type,
+        loginId: result.loginId,
+        verificationUrl: result.verificationUrl,
+        userCode: result.userCode,
+      };
+    }
+    throw new CodexAppServerError(
+      "PROTOCOL_ERROR",
+      "Codex app-server returned an incomplete login response.",
+    );
   }
 
   async close(): Promise<void> {

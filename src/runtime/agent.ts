@@ -17,8 +17,30 @@ export interface AgentRuntime {
     turn: Turn,
     onDelta?: (delta: string) => void,
   ): Promise<Reply>;
+  readAccount?(): Promise<RuntimeAccountStatus>;
+  startLogin?(type: RuntimeLoginType): Promise<RuntimeLoginStart>;
   close?(): Promise<void>;
 }
+
+export type RuntimeLoginType = "chatgpt" | "chatgptDeviceCode";
+
+export interface RuntimeAccountStatus {
+  available: boolean;
+  requiresOpenaiAuth: boolean;
+  account: null | {
+    type: "apiKey" | "chatgpt" | "amazonBedrock";
+    email?: string;
+  };
+}
+
+export type RuntimeLoginStart =
+  | { type: "chatgpt"; loginId: string; authUrl: string }
+  | {
+      type: "chatgptDeviceCode";
+      loginId: string;
+      verificationUrl: string;
+      userCode: string;
+    };
 
 /**
  * EchoRuntime — a dependency-free, key-free runtime for smoke tests and demos.

@@ -38,6 +38,24 @@ export interface ProactiveEvent {
   occurredAt: string;
 }
 
+export interface RuntimeAccountStatus {
+  available: boolean;
+  requiresOpenaiAuth: boolean;
+  account: null | {
+    type: "apiKey" | "chatgpt" | "amazonBedrock";
+    email?: string;
+  };
+}
+
+export type RuntimeLoginStart =
+  | { type: "chatgpt"; loginId: string; authUrl: string }
+  | {
+      type: "chatgptDeviceCode";
+      loginId: string;
+      verificationUrl: string;
+      userCode: string;
+    };
+
 type TurnStreamEvent =
   | { type: "start"; threadId: string }
   | { type: "delta"; delta: string }
@@ -94,6 +112,27 @@ export async function getHealth(): Promise<HealthData> {
     headers: { accept: "application/json" },
   });
   return readPayload<HealthData>(response);
+}
+
+export async function getRuntimeAccount(): Promise<RuntimeAccountStatus> {
+  const response = await fetch("/api/v1/runtime/account", {
+    headers: { accept: "application/json" },
+  });
+  return readPayload<RuntimeAccountStatus>(response);
+}
+
+export async function startRuntimeLogin(
+  type: "chatgpt" | "chatgptDeviceCode",
+): Promise<RuntimeLoginStart> {
+  const response = await fetch("/api/v1/runtime/login", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ type }),
+  });
+  return readPayload<RuntimeLoginStart>(response);
 }
 
 export async function postTurn(

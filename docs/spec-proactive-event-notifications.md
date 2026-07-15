@@ -217,6 +217,18 @@ Never:
 - Documentation clearly distinguishes provider ingress, OpenClaw relay, Codex
   execution, and frontend delivery.
 
+## Deployment account boundary
+
+The same web surface may bootstrap Codex authentication through the official
+app-server methods `account/read` and `account/login/start`. The public HTTP
+boundary accepts only the selected managed flow (`chatgpt` or
+`chatgptDeviceCode`); it never accepts API keys, passwords, OAuth tokens, or
+`chatgptAuthTokens`.
+
+One app-server process represents one Codex account. Per-user deployment means
+one isolated process and Codex home per OS user/container/session. A shared
+process cannot safely provide independent browser-user Codex identities.
+
 ## Open questions
 
 1. Should provider events automatically start a read-only Codex triage turn, or

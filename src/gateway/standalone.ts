@@ -1,6 +1,7 @@
 import type { Colleague, Turn, Reply } from "../colleague/types.js";
 import { makeChannel } from "../channels/index.js";
 import { makeRuntime, type AgentRuntime } from "../runtime/agent.js";
+import type { RuntimeLoginType } from "../runtime/agent.js";
 import { MemoryStore } from "../runtime/memory.js";
 
 /**
@@ -39,6 +40,21 @@ export class StandaloneGateway {
   get runtimeName(): string {
     return this.runtime.name;
   }
+
+  readRuntimeAccount = () =>
+    this.runtime.readAccount?.() ??
+    Promise.resolve({
+      available: false,
+      requiresOpenaiAuth: false,
+      account: null,
+    });
+
+  startRuntimeLogin = (type: RuntimeLoginType) => {
+    if (!this.runtime.startLogin) {
+      return Promise.reject(new Error("Runtime login is not available."));
+    }
+    return this.runtime.startLogin(type);
+  };
 
   async close(): Promise<void> {
     await this.runtime.close?.();

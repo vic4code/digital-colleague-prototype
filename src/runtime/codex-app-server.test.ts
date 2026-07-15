@@ -252,6 +252,52 @@ describe("CodexAppServerRuntime", () => {
     ).toThrow("CODEX_REASONING_EFFORT must be one of");
   });
 
+  it("uses Codex account/read and managed login without accepting credentials", async () => {
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake)) return;
+      if (message.method === "account/read") {
+        fake.send({
+          id: message.id,
+          result: {
+            account: { type: "chatgpt", email: "ada@example.com", planType: "plus" },
+            requiresOpenaiAuth: true,
+          },
+        });
+      }
+      if (message.method === "account/login/start") {
+        fake.send({
+          id: message.id,
+          result: {
+            type: "chatgpt",
+            loginId: "login-1",
+            authUrl: "https://auth.openai.com/authorize",
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({ startProcess: () => server });
+
+    await expect(runtime.readAccount()).resolves.toEqual({
+      available: true,
+      requiresOpenaiAuth: true,
+      account: { type: "chatgpt", email: "ada@example.com" },
+    });
+    await expect(runtime.startLogin("chatgpt")).resolves.toEqual({
+      type: "chatgpt",
+      loginId: "login-1",
+      authUrl: "https://auth.openai.com/authorize",
+    });
+    expect(
+      server.messages.find((message) => message.method === "account/login/start")?.params,
+    ).toEqual({
+      type: "chatgpt",
+      codexStreamlinedLogin: true,
+      useHostedLoginSuccessPage: true,
+      appBrand: "codex",
+    });
+    await runtime.close();
+  });
+
   it("uses the native initialize, thread/start and turn/start protocol", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let turnNumber = 0;

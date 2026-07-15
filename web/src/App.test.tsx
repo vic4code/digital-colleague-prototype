@@ -34,6 +34,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("digital colleague chat", () => {
   beforeEach(() => {
+    sessionStorage.setItem("digital-colleague-account-confirmed", "ada@example.com");
     FakeEventSource.instances = [];
     vi.stubGlobal("EventSource", FakeEventSource);
     vi.stubGlobal(
@@ -50,6 +51,15 @@ describe("digital colleague chat", () => {
         }
         if (String(input).endsWith("/api/v1/events")) {
           return jsonResponse({ data: [] });
+        }
+        if (String(input).endsWith("/api/v1/runtime/account")) {
+          return jsonResponse({
+            data: {
+              available: true,
+              requiresOpenaiAuth: true,
+              account: { type: "chatgpt", email: "ada@example.com" },
+            },
+          });
         }
         const request = JSON.parse(String(init?.body)) as { text: string };
         return jsonResponse({
@@ -227,6 +237,15 @@ describe("digital colleague chat", () => {
       if (String(input).endsWith("/api/v1/events")) {
         return jsonResponse({ data: [] });
       }
+      if (String(input).endsWith("/api/v1/runtime/account")) {
+        return jsonResponse({
+          data: {
+            available: true,
+            requiresOpenaiAuth: true,
+            account: { type: "chatgpt", email: "ada@example.com" },
+          },
+        });
+      }
       return pending;
     });
     const user = userEvent.setup();
@@ -360,6 +379,50 @@ describe("digital colleague chat", () => {
     expect(await screen.findByText("Ada 正在完成上一件事")).toBeInTheDocument();
     expect(screen.getByText("Ada 正忙，但連線正常")).toBeInTheDocument();
     expect(screen.queryByText("Ada 暫時離線")).not.toBeInTheDocument();
+  });
+
+  it("prompts an unauthenticated deployment to use official Codex login", async () => {
+    sessionStorage.removeItem("digital-colleague-account-confirmed");
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/health")) {
+        return jsonResponse({
+          data: {
+            status: "ok",
+            runtime: "codex-app-server",
+            colleague: { id: "ada", name: "Ada" },
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/events")) return jsonResponse({ data: [] });
+      if (url.endsWith("/api/v1/runtime/account")) {
+        return jsonResponse({
+          data: { available: true, requiresOpenaiAuth: true, account: null },
+        });
+      }
+      if (url.endsWith("/api/v1/runtime/login")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ type: "chatgpt" });
+        return jsonResponse({
+          data: {
+            type: "chatgpt",
+            loginId: "login-1",
+            authUrl: "https://auth.openai.com/authorize",
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const popup = { location: { href: "" }, close: vi.fn() };
+    const open = vi.spyOn(window, "open").mockReturnValue(popup as never);
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: "連接你的 Codex 帳號" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "使用 ChatGPT 登入" }));
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(popup.location.href).toBe("https://auth.openai.com/authorize");
+    expect(screen.getByText("完成登入後，Ada 會自動確認連線狀態。")).toBeInTheDocument();
   });
 
   it("does not send an empty message", async () => {

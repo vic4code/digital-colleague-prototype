@@ -89,10 +89,12 @@ textarea:focus-visible {
   align-items: center;
   gap: 14px;
 }
-.notification-button.ant-btn {
+.notification-button.ant-btn,
+.account-button.ant-btn {
   color: var(--muted);
 }
-.notification-button.ant-btn:hover {
+.notification-button.ant-btn:hover,
+.account-button.ant-btn:hover {
   color: var(--accent);
   background: var(--accent-soft);
 }
@@ -180,6 +182,23 @@ textarea:focus-visible {
   padding: 0;
   font-size: 12px;
 }
+.account-onboarding { display: grid; gap: 16px; padding-top: 4px; }
+.account-onboarding > p { margin: 0; color: var(--muted); line-height: 1.65; }
+.account-onboarding > p strong { color: var(--text); }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.login-progress { color: var(--accent) !important; font-size: 12px; }
+.login-error { color: var(--danger) !important; font-size: 12px; }
+.device-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.device-code span { color: var(--muted); font-size: 12px; }
+.device-code strong { color: var(--text); font-size: 20px; letter-spacing: 0.12em; }
 
 .workspace {
   display: grid;

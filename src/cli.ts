@@ -65,6 +65,10 @@ program
       dispatch: gateway.dispatch,
       colleague: { id: colleague.person.id, name: colleague.person.name },
       runtime: gateway.runtimeName,
+      account: {
+        read: gateway.readRuntimeAccount,
+        startLogin: gateway.startRuntimeLogin,
+      },
       webRoot: opts.webRoot ? String(opts.webRoot) : undefined,
     });
 

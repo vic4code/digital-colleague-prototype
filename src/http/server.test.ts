@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Reply, Turn } from "../colleague/types.js";
 import { ProactiveEventStore } from "../events/events.js";
 import { createTurnServer, type TurnServer } from "./server.js";
+import type { TurnServerOptions } from "./server.js";
 
 const servers: TurnServer[] = [];
 const temporaryDirectories: string[] = [];
@@ -34,6 +35,7 @@ async function start(
     webRoot?: string;
     eventIngressToken?: string;
     eventStore?: ProactiveEventStore;
+    account?: TurnServerOptions["account"];
   } = {},
 ) {
   const server = createTurnServer({
@@ -113,6 +115,66 @@ describe("localhost turn API", () => {
         colleague: { id: "ada", name: "Ada" },
       },
     });
+  });
+
+  it("reports Codex account readiness without returning tokens", async () => {
+    const read = vi.fn(async () => ({
+      available: true,
+      requiresOpenaiAuth: true,
+      account: { type: "chatgpt" as const, email: "ada@example.com" },
+    }));
+    const startLogin = vi.fn();
+    const url = await start(async () => ({ text: "unused" }), {
+      account: { read, startLogin },
+    });
+
+    const response = await fetch(`${url}/api/v1/runtime/account`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: {
+        available: true,
+        requiresOpenaiAuth: true,
+        account: { type: "chatgpt", email: "ada@example.com" },
+      },
+    });
+  });
+
+  it("starts only official browser or device-code login flows", async () => {
+    const startLogin = vi.fn(async () => ({
+      type: "chatgpt" as const,
+      loginId: "login-1",
+      authUrl: "https://auth.openai.com/authorize",
+    }));
+    const url = await start(async () => ({ text: "unused" }), {
+      account: {
+        read: async () => ({
+          available: true,
+          requiresOpenaiAuth: true,
+          account: null,
+        }),
+        startLogin,
+      },
+    });
+
+    const response = await fetch(`${url}/api/v1/runtime/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "chatgpt" }),
+    });
+    const rejectedSecret = await fetch(`${url}/api/v1/runtime/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "apiKey", apiKey: "must-not-cross-http" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { type: "chatgpt", authUrl: "https://auth.openai.com/authorize" },
+    });
+    expect(startLogin).toHaveBeenCalledWith("chatgpt");
+    expect(rejectedSecret.status).toBe(422);
+    expect(startLogin).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes a browser message into a Turn and returns Ada's reply", async () => {

@@ -8,6 +8,11 @@ import {
 import { readFile, realpath, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import type { Reply, Turn } from "../colleague/types.js";
+import type {
+  RuntimeAccountStatus,
+  RuntimeLoginStart,
+  RuntimeLoginType,
+} from "../runtime/agent.js";
 import { makeTurn } from "../channels/channel.js";
 import {
   EventValidationError,
@@ -31,6 +36,10 @@ export interface TurnServerOptions {
   webRoot?: string;
   eventIngressToken?: string;
   eventStore?: ProactiveEventStore;
+  account?: {
+    read(): Promise<RuntimeAccountStatus>;
+    startLogin(type: RuntimeLoginType): Promise<RuntimeLoginStart>;
+  };
 }
 
 class HttpError extends Error {
@@ -253,6 +262,10 @@ function parseTurnBody(value: unknown): { text: string; threadId: string } {
   return { text, threadId };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function isAllowedOrigin(request: IncomingMessage): boolean {
   const origin = request.headers.origin;
   return origin === undefined || (typeof origin === "string" && LOCAL_ORIGIN.test(origin));
@@ -307,6 +320,45 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
           return;
         }
         sendJson(response, 200, { data: eventStore.list() });
+        return;
+      }
+
+      if (request.method === "GET" && request.url === "/api/v1/runtime/account") {
+        if (!isAllowedOrigin(request)) {
+          sendError(response, 403, "ORIGIN_FORBIDDEN", "Browser origin is not allowed.");
+          return;
+        }
+        const account = options.account
+          ? await options.account.read()
+          : { available: false, requiresOpenaiAuth: false, account: null };
+        sendJson(response, 200, { data: account });
+        return;
+      }
+
+      if (request.method === "POST" && request.url === "/api/v1/runtime/login") {
+        if (!isAllowedOrigin(request)) {
+          sendError(response, 403, "ORIGIN_FORBIDDEN", "Browser origin is not allowed.");
+          return;
+        }
+        if (!options.account) {
+          sendError(response, 409, "LOGIN_UNAVAILABLE", "Runtime login is not available.");
+          return;
+        }
+        const contentType = request.headers["content-type"] ?? "";
+        if (!contentType.toLowerCase().startsWith("application/json")) {
+          sendError(response, 415, "JSON_REQUIRED", "Content-Type must be application/json.");
+          return;
+        }
+        const body = await readJson(request);
+        if (
+          !isRecord(body) ||
+          (body.type !== "chatgpt" && body.type !== "chatgptDeviceCode") ||
+          Object.keys(body).some((key) => key !== "type")
+        ) {
+          sendError(response, 422, "INVALID_LOGIN", "Choose a supported Codex login flow.");
+          return;
+        }
+        sendJson(response, 200, { data: await options.account.startLogin(body.type) });
         return;
       }
 
