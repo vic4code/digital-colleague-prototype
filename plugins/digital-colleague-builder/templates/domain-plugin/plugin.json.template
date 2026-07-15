@@ -1,0 +1,8 @@
+{
+  "name": "example-domain-plugin",
+  "version": "0.1.0",
+  "description": "Replace with the domain workflow this plugin packages.",
+  "author": { "name": "Your team" },
+  "license": "MIT",
+  "skills": "./skills/"
+}

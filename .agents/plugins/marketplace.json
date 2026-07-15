@@ -5,6 +5,42 @@
   },
   "plugins": [
     {
+      "name": "digital-colleague-core",
+      "source": {
+        "source": "local",
+        "path": "./plugins/digital-colleague-core"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "digital-colleague-builder",
+      "source": {
+        "source": "local",
+        "path": "./plugins/digital-colleague-builder"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "digital-colleague-web",
+      "source": {
+        "source": "local",
+        "path": "./plugins/digital-colleague-web"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "digital-colleague-workspace",
       "source": {
         "source": "local",
@@ -13,6 +49,18 @@
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "ada-legal-ops",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ada-legal-ops"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
       },
       "category": "Productivity"
     }

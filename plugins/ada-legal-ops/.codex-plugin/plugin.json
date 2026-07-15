@@ -1,0 +1,23 @@
+{
+  "name": "ada-legal-ops",
+  "version": "0.1.0",
+  "description": "Example legal operations workflows for the Ada colleague fixture.",
+  "author": { "name": "Digital Colleague Prototype Contributors" },
+  "license": "MIT",
+  "keywords": ["legal-operations", "contracts", "triage"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Ada Legal Operations",
+    "shortDescription": "Example contract review and legal intake workflows.",
+    "longDescription": "Demonstrate bounded legal operations skills that identify risks and prepare review material without approving or sending legal documents.",
+    "developerName": "Digital Colleague Prototype Contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"],
+    "defaultPrompt": [
+      "Review this contract against Ada's legal boundaries.",
+      "Triage this legal intake request.",
+      "Summarize the clauses that need human approval."
+    ],
+    "brandColor": "#176B52"
+  }
+}

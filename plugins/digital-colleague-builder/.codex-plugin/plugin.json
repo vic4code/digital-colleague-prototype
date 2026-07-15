@@ -1,0 +1,23 @@
+{
+  "name": "digital-colleague-builder",
+  "version": "0.1.0",
+  "description": "Configure the clone's colleague and scaffold portable Codex-native domain plugins.",
+  "author": { "name": "Digital Colleague Prototype Contributors" },
+  "license": "MIT",
+  "keywords": ["digital-colleague", "builder", "plugin"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Digital Colleague Builder",
+    "shortDescription": "Configure a colleague and create domain plugins.",
+    "longDescription": "Safely customize the clone's one colleague and scaffold independently installable Codex plugins without embedding host paths or credentials.",
+    "developerName": "Digital Colleague Prototype Contributors",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "Help me configure the colleague in this clone.",
+      "Create a Codex-native domain plugin for this colleague.",
+      "Validate the clone's plugin marketplace."
+    ],
+    "brandColor": "#1677FF"
+  }
+}

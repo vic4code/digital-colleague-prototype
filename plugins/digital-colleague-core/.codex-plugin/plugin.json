@@ -1,0 +1,23 @@
+{
+  "name": "digital-colleague-core",
+  "version": "0.1.0",
+  "description": "Operate and diagnose the one digital colleague configured in this clone.",
+  "author": { "name": "Digital Colleague Prototype Contributors" },
+  "license": "MIT",
+  "keywords": ["digital-colleague", "operations", "diagnostics"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Digital Colleague Core",
+    "shortDescription": "Inspect, validate, and operate one colleague.",
+    "longDescription": "Run safe local preflight, identity inspection, health checks, and bounded runtime operations for the configured digital colleague.",
+    "developerName": "Digital Colleague Prototype Contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"],
+    "defaultPrompt": [
+      "Check whether my configured colleague is ready.",
+      "Inspect the colleague identity without printing secrets.",
+      "Diagnose the local web and runtime health."
+    ],
+    "brandColor": "#176B52"
+  }
+}

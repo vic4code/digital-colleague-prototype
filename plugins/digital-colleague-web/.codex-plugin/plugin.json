@@ -1,0 +1,23 @@
+{
+  "name": "digital-colleague-web",
+  "version": "0.1.0",
+  "description": "Configure and diagnose the reference text and voice web interaction surface.",
+  "author": { "name": "Digital Colleague Prototype Contributors" },
+  "license": "MIT",
+  "keywords": ["digital-colleague", "web", "react"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Digital Colleague Web",
+    "shortDescription": "Run and diagnose the colleague web surface.",
+    "longDescription": "Start, verify, and troubleshoot the loopback React web UI and Codex app-server API without exposing runtime credentials to the browser.",
+    "developerName": "Digital Colleague Prototype Contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"],
+    "defaultPrompt": [
+      "Start the local colleague web experience.",
+      "Check the web and API health.",
+      "Diagnose why the browser cannot reach the colleague."
+    ],
+    "brandColor": "#176B52"
+  }
+}

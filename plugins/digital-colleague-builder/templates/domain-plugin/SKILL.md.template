@@ -1,0 +1,9 @@
+---
+name: example-domain-workflow
+description: Replace with a concrete trigger and responsibility for this domain workflow.
+---
+
+# Example domain workflow
+
+Document the bounded workflow, required evidence, safety limits, and expected
+output. Do not include credentials or customer data in this template.
