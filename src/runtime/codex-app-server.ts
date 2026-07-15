@@ -482,6 +482,17 @@ class CodexAppServerClient {
       }),
     );
 
+    const declaredWorkspace = buildNativeWorkspaceSnapshot(
+      resolutions,
+      undefined,
+    );
+    if (
+      isConnectorSetupIntent(text) &&
+      declaredWorkspace.officialConnectionLinks.length > 0
+    ) {
+      return declaredWorkspace;
+    }
+
     const appIds = nativeAppIds(resolutions);
     const appNames = new Set(nativeUnresolvedAppNames(resolutions));
     const appInventory =
@@ -994,6 +1005,24 @@ export class CodexAppServerRuntime implements AgentRuntime {
       ]);
 
       if (
+        isConnectorSetupIntent(turn.text) &&
+        workspace.officialConnectionLinks.length > 0
+      ) {
+        const labels = workspace.officialConnectionLinks
+          .map(({ label }) => label)
+          .join("、");
+        const links = workspace.officialConnectionLinks
+          .map(({ label, installUrl }) => `[連接 ${label}](${installUrl})`)
+          .join("\n");
+        const text =
+          `請使用 ${labels} 的官方連接頁完成 OAuth，並在官方頁面選擇你要連接的 ${labels} 帳號。\n\n` +
+          `${links}\n\n` +
+          `完成後回來告訴我「重新檢查 ${labels}」。`;
+        onDelta?.(text);
+        return { text };
+      }
+
+      if (
         workspace.connectionActions.length > 0 &&
         workspace.accessibleConnectorCount === 0
       ) {
@@ -1075,4 +1104,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isConnectorRefreshIntent(text: string): boolean {
   return /重新檢查|重新連(?:接|線)|recheck|refresh connector/i.test(text);
+}
+
+function isConnectorSetupIntent(text: string): boolean {
+  return /登入|連接|連線|\bconnect\b|\bsign\s*in\b|切換.{0,8}帳號|(?:我要|請|幫我|開始|進行|完成|開啟).{0,8}(?:授權|\boauth\b)/i.test(
+    text,
+  );
 }

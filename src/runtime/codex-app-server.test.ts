@@ -555,6 +555,36 @@ describe("CodexAppServerRuntime", () => {
     await runtime.close();
   });
 
+  it("returns an official setup link without waiting for app/list", async () => {
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake)) return;
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    await expect(
+      runtime.respond(
+        colleague,
+        history,
+        turn("我要用 cathayaids@gmail.com 登入 Gmail connector"),
+      ),
+    ).resolves.toEqual({
+      text:
+        "請使用 Gmail 的官方連接頁完成 OAuth，並在官方頁面選擇你要連接的 Gmail 帳號。\n\n" +
+        "[連接 Gmail](https://chatgpt.com/apps/gmail/connector_2128aebfecb84f64a069897515042a44)\n\n" +
+        "完成後回來告訴我「重新檢查 Gmail」。",
+    });
+    expect(
+      server.messages.filter((message) => message.method === "app/list"),
+    ).toHaveLength(0);
+    expect(
+      server.messages.filter((message) => message.method === "turn/start"),
+    ).toHaveLength(0);
+    await runtime.close();
+  });
+
   it("uses app/list for OAuth guidance when plugin/read temporarily fails", async () => {
     const server = new FakeAppServer((message, fake) => {
       if (message.method === "plugin/read") {

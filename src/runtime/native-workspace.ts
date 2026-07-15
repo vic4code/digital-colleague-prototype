@@ -24,6 +24,7 @@ export interface NativeWorkspaceSnapshot {
   invocationTokens: string[];
   inputs: NativeWorkspaceInput[];
   connectionActions: NativeConnectionAction[];
+  officialConnectionLinks: NativeConnectionAction[];
   accessibleConnectorCount: number;
 }
 
@@ -210,7 +211,7 @@ function requestedSpecs(text: string): ConnectorSpec[] {
     );
   const outlook = /\boutlook\b/i.test(text);
   const email =
-    /\bgmail\b|\be-?mail\b|\binbox\b|郵件|信件|信箱|收信|寄信|回信|哪些信|封信|待回覆/i.test(
+    /(?<!@)\bgmail\b|\be-?mail\b|\binbox\b|郵件|信件|信箱|收信|寄信|回信|哪些信|封信|待回覆/i.test(
       text,
     );
   const calendar =
@@ -512,6 +513,7 @@ export function buildNativeWorkspaceSnapshot(
   const invocationTokens: string[] = [];
   const inputs: NativeWorkspaceInput[] = [];
   const connectionActions: NativeConnectionAction[] = [];
+  const officialConnectionLinks: NativeConnectionAction[] = [];
   let accessibleConnectorCount = 0;
   const inputKeys = new Set<string>();
   const apps = (appInventory?.data ?? [])
@@ -636,6 +638,7 @@ export function buildNativeWorkspaceSnapshot(
     const installUrl = appInfo?.installUrl ?? declaredApp?.installUrl;
     if (installUrl) {
       lines.push(`- 官方連接頁：${installUrl}`);
+      officialConnectionLinks.push({ label: selection.label, installUrl });
       if (appInfo?.isEnabled && !appInfo.isAccessible) {
         connectionActions.push({ label: selection.label, installUrl });
       }
@@ -647,6 +650,7 @@ export function buildNativeWorkspaceSnapshot(
     invocationTokens,
     inputs,
     connectionActions,
+    officialConnectionLinks,
     accessibleConnectorCount,
   };
 }

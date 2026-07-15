@@ -116,6 +116,14 @@ describe("native workspace connector selection", () => {
     );
   });
 
+  it("does not treat a Gmail address as a request to use the Gmail connector", () => {
+    expect(
+      nativeConnectorIntentKey(
+        "我也要用 cathayaids@gmail.com 登入 Notion",
+      ),
+    ).toBe("notion");
+  });
+
   it("selects the complete official M365 connector set for a Microsoft 365 brief", () => {
     const text = "幫我做 Microsoft 365 今日工作摘要";
 
@@ -282,6 +290,12 @@ describe("native workspace connector selection", () => {
         installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
       },
     ]);
+    expect(disconnected.officialConnectionLinks).toEqual([
+      {
+        label: "Gmail",
+        installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
+      },
+    ]);
     expect(disconnected.accessibleConnectorCount).toBe(0);
 
     const connected = buildNativeWorkspaceSnapshot(resolutions, {
@@ -300,6 +314,12 @@ describe("native workspace connector selection", () => {
       "Gmail connector：帳號已連線，可在本回合叫用",
     );
     expect(connected.connectionActions).toEqual([]);
+    expect(connected.officialConnectionLinks).toEqual([
+      {
+        label: "Gmail",
+        installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
+      },
+    ]);
     expect(connected.accessibleConnectorCount).toBe(1);
   });
 
