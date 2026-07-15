@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   createServer,
   type IncomingMessage,
@@ -9,6 +9,11 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import type { Reply, Turn } from "../colleague/types.js";
 import { makeTurn } from "../channels/channel.js";
+import {
+  EventValidationError,
+  ProactiveEventStore,
+  type ProactiveEvent,
+} from "../events/events.js";
 
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_TEXT_LENGTH = 4_000;
@@ -24,6 +29,8 @@ export interface TurnServerOptions {
   timeoutMs?: number;
   maxConcurrent?: number;
   webRoot?: string;
+  eventIngressToken?: string;
+  eventStore?: ProactiveEventStore;
 }
 
 class HttpError extends Error {
@@ -160,6 +167,50 @@ function sendEvent(response: ServerResponse, value: unknown): void {
   }
 }
 
+function sendNamedEvent(
+  response: ServerResponse,
+  name: string,
+  value: unknown,
+): void {
+  if (!response.destroyed && !response.writableEnded) {
+    response.write(`event: ${name}\ndata: ${JSON.stringify(value)}\n\n`);
+  }
+}
+
+function tokenMatches(received: string, expected: string): boolean {
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(received), digest(expected));
+}
+
+function bearerToken(request: IncomingMessage): string {
+  const authorization = request.headers.authorization;
+  return typeof authorization === "string" && authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : "";
+}
+
+function startNotificationStream(
+  response: ServerResponse,
+  eventStore: ProactiveEventStore,
+): void {
+  startEventStream(response);
+  response.write("retry: 3000\n\n");
+  sendNamedEvent(response, "ready", { connected: true });
+  const unsubscribe = eventStore.subscribe((event: ProactiveEvent) =>
+    sendNamedEvent(response, "notification", event),
+  );
+  const heartbeat = setInterval(() => {
+    if (!response.destroyed && !response.writableEnded) {
+      response.write(": heartbeat\n\n");
+    }
+  }, 15_000);
+  heartbeat.unref();
+  response.once("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+}
+
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -230,9 +281,14 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 export function createTurnServer(options: TurnServerOptions): TurnServer {
   const timeoutMs = options.timeoutMs ?? 120_000;
   const maxConcurrent = options.maxConcurrent ?? 1;
+  const eventStore = options.eventStore ?? new ProactiveEventStore();
+  const eventIngressToken =
+    options.eventIngressToken ?? process.env.DC_EVENT_INGRESS_TOKEN ?? "";
   let inFlight = 0;
 
   return createServer(async (request, response) => {
+    const requestId = randomUUID();
+    response.setHeader("x-request-id", requestId);
     try {
       if (request.method === "GET" && request.url === "/api/v1/health") {
         sendJson(response, 200, {
@@ -242,6 +298,61 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
             colleague: options.colleague,
           },
         });
+        return;
+      }
+
+      if (request.method === "GET" && request.url === "/api/v1/events") {
+        if (!isAllowedOrigin(request)) {
+          sendError(response, 403, "ORIGIN_FORBIDDEN", "Browser origin is not allowed.");
+          return;
+        }
+        sendJson(response, 200, { data: eventStore.list() });
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        request.url === "/api/v1/events/stream"
+      ) {
+        if (!isAllowedOrigin(request)) {
+          sendError(response, 403, "ORIGIN_FORBIDDEN", "Browser origin is not allowed.");
+          return;
+        }
+        startNotificationStream(response, eventStore);
+        return;
+      }
+
+      if (request.method === "POST" && request.url === "/api/v1/events") {
+        const startedAt = performance.now();
+        if (!eventIngressToken) {
+          sendError(
+            response,
+            503,
+            "EVENT_INGRESS_DISABLED",
+            "Proactive event ingress is not configured.",
+          );
+          return;
+        }
+        if (!tokenMatches(bearerToken(request), eventIngressToken)) {
+          sendError(response, 401, "UNAUTHORIZED", "Event token is invalid.");
+          return;
+        }
+        const contentType = request.headers["content-type"] ?? "";
+        if (!contentType.toLowerCase().startsWith("application/json")) {
+          sendError(response, 415, "JSON_REQUIRED", "Content-Type must be application/json.");
+          return;
+        }
+        const accepted = eventStore.accept(await readJson(request));
+        sendJson(response, accepted.duplicate ? 200 : 202, { data: accepted });
+        console.info(
+          JSON.stringify({
+            event: "proactive_event_received",
+            requestId,
+            source: accepted.event.source,
+            result: accepted.duplicate ? "duplicate" : "accepted",
+            durationMs: Math.round(performance.now() - startedAt),
+          }),
+        );
         return;
       }
 
@@ -323,6 +434,10 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
       }
       if (error instanceof HttpError) {
         sendError(response, error.status, error.code, error.message);
+        return;
+      }
+      if (error instanceof EventValidationError) {
+        sendError(response, 422, "INVALID_EVENT", error.message);
         return;
       }
       if (error instanceof RuntimeTimeoutError) {

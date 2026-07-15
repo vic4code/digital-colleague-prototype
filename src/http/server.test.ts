@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Reply, Turn } from "../colleague/types.js";
+import { ProactiveEventStore } from "../events/events.js";
 import { createTurnServer, type TurnServer } from "./server.js";
 
 const servers: TurnServer[] = [];
@@ -27,7 +28,13 @@ afterEach(async () => {
 
 async function start(
   dispatch: (turn: Turn, onDelta?: (delta: string) => void) => Promise<Reply>,
-  options: { timeoutMs?: number; maxConcurrent?: number; webRoot?: string } = {},
+  options: {
+    timeoutMs?: number;
+    maxConcurrent?: number;
+    webRoot?: string;
+    eventIngressToken?: string;
+    eventStore?: ProactiveEventStore;
+  } = {},
 ) {
   const server = createTurnServer({
     dispatch,
@@ -41,6 +48,15 @@ async function start(
   const { port } = server.address() as AddressInfo;
   return `http://127.0.0.1:${port}`;
 }
+
+const eventPayload = {
+  eventId: "gmail-event-1",
+  source: "gmail",
+  type: "message.created",
+  title: "New message needs attention",
+  summary: "A safe preview",
+  occurredAt: "2026-07-15T13:00:00.000Z",
+};
 
 describe("localhost turn API", () => {
   it("serves the built web app and keeps API routes on the same origin", async () => {
@@ -256,5 +272,120 @@ describe("localhost turn API", () => {
 
     expect(busy.status).toBe(429);
     expect(timedOut.status).toBe(504);
+  });
+
+  it("authenticates, accepts, deduplicates, and replays proactive events", async () => {
+    const eventStore = new ProactiveEventStore();
+    const url = await start(async () => ({ text: "unused" }), {
+      eventIngressToken: "test-ingress-token",
+      eventStore,
+    });
+    const post = (token: string, payload = eventPayload) =>
+      fetch(`${url}/api/v1/events`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+    const unauthorized = await post("wrong-token");
+    const accepted = await post("test-ingress-token");
+    const duplicate = await post("test-ingress-token");
+    const replay = await fetch(`${url}/api/v1/events`);
+
+    expect(unauthorized.status).toBe(401);
+    expect(accepted.status).toBe(202);
+    expect(accepted.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    await expect(accepted.json()).resolves.toMatchObject({
+      data: { duplicate: false, event: eventPayload },
+    });
+    expect(duplicate.status).toBe(200);
+    await expect(duplicate.json()).resolves.toMatchObject({
+      data: { duplicate: true },
+    });
+    await expect(replay.json()).resolves.toEqual({ data: [eventPayload] });
+  });
+
+  it("fails closed when event ingress has no configured token", async () => {
+    const url = await start(async () => ({ text: "unused" }), {
+      eventStore: new ProactiveEventStore(),
+      eventIngressToken: "",
+    });
+
+    const response = await fetch(`${url}/api/v1/events`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer any-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(eventPayload),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "EVENT_INGRESS_DISABLED" },
+    });
+  });
+
+  it("validates proactive events before storing them", async () => {
+    const url = await start(async () => ({ text: "unused" }), {
+      eventIngressToken: "test-ingress-token",
+      eventStore: new ProactiveEventStore(),
+    });
+
+    const response = await fetch(`${url}/api/v1/events`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-ingress-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ ...eventPayload, source: "unknown" }),
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_EVENT" },
+    });
+  });
+
+  it("streams proactive events independently from Codex turns", async () => {
+    const eventStore = new ProactiveEventStore();
+    const dispatch = vi.fn(async () => ({ text: "must not run" }));
+    const url = await start(dispatch, {
+      eventIngressToken: "test-ingress-token",
+      eventStore,
+    });
+    const controller = new AbortController();
+    const streamResponse = await fetch(`${url}/api/v1/events/stream`, {
+      signal: controller.signal,
+    });
+    const reader = streamResponse.body!.getReader();
+    const decoder = new TextDecoder();
+    const ready = decoder.decode((await reader.read()).value);
+
+    const accepted = await fetch(`${url}/api/v1/events`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-ingress-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(eventPayload),
+    });
+    const notification = decoder.decode((await reader.read()).value);
+    controller.abort();
+    await reader.cancel().catch(() => undefined);
+
+    expect(streamResponse.status).toBe(200);
+    expect(streamResponse.headers.get("content-type")).toContain(
+      "text/event-stream",
+    );
+    expect(ready).toContain("retry: 3000");
+    expect(ready).toContain("event: ready");
+    expect(accepted.status).toBe(202);
+    expect(notification).toContain("event: notification");
+    expect(notification).toContain('"eventId":"gmail-event-1"');
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });
