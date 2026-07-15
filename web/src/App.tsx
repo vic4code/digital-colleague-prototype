@@ -131,7 +131,10 @@ export function App({ voiceSupported = false }: AppProps) {
   const [loginStart, setLoginStart] = useState<RuntimeLoginStart>();
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [eventStreamGeneration, setEventStreamGeneration] = useState(0);
   const seenEventIdsRef = useRef(new Set<string>());
+  const eventStreamReadyRef = useRef(false);
+  const healthOnlineRef = useRef<boolean | undefined>(undefined);
   const messageListRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<TextAreaRef>(null);
   const followConversationRef = useRef(true);
@@ -145,16 +148,40 @@ export function App({ voiceSupported = false }: AppProps) {
 
   useEffect(() => {
     let active = true;
-    void getHealth().then(
-      () => {
-        if (active) setRuntimeStatus("ready");
-      },
-      () => {
-        if (active) setRuntimeStatus("offline");
-      },
-    );
+    let checking = false;
+    const check = () => {
+      if (checking) return;
+      checking = true;
+      void getHealth().then(
+        () => {
+          if (!active) return;
+          healthOnlineRef.current = true;
+          setRuntimeStatus((current) => {
+            if (current === "busy" || current === "reconnecting") return current;
+            if (current === "offline" && !eventStreamReadyRef.current) {
+              return "reconnecting";
+            }
+            return "ready";
+          });
+        },
+        () => {
+          if (!active) return;
+          eventStreamReadyRef.current = false;
+          if (healthOnlineRef.current !== false) {
+            setEventStreamGeneration((current) => current + 1);
+          }
+          healthOnlineRef.current = false;
+          setRuntimeStatus("offline");
+        },
+      ).finally(() => {
+        checking = false;
+      });
+    };
+    check();
+    const timer = window.setInterval(check, 3_000);
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
   }, []);
 
@@ -230,12 +257,14 @@ export function App({ voiceSupported = false }: AppProps) {
 
     const unsubscribe = subscribeToProactiveEvents({
       onReady: () => {
+        eventStreamReadyRef.current = true;
         setRuntimeStatus((current) =>
-          current === "checking" || current === "reconnecting" ? "ready" : current,
+          current === "busy" ? current : "ready",
         );
       },
       onEvent: (event) => acceptEvent(event, true),
       onError: () => {
+        eventStreamReadyRef.current = false;
         setRuntimeStatus((current) =>
           current === "ready" || current === "checking" ? "reconnecting" : current,
         );
@@ -253,7 +282,7 @@ export function App({ voiceSupported = false }: AppProps) {
       active = false;
       unsubscribe();
     };
-  }, [notificationApi]);
+  }, [eventStreamGeneration, notificationApi]);
 
   useLayoutEffect(() => {
     const list = messageListRef.current;

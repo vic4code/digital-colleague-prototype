@@ -94,17 +94,44 @@ export function subscribeToProactiveEvents(handlers: {
   onEvent(event: ProactiveEvent): void;
   onError(): void;
 }): () => void {
-  const source = new EventSource("/api/v1/events/stream");
-  source.addEventListener("ready", handlers.onReady);
-  source.addEventListener("notification", (message) => {
-    try {
-      handlers.onEvent(JSON.parse((message as MessageEvent<string>).data));
-    } catch {
+  let source: EventSource | undefined;
+  let retryTimer: number | undefined;
+  let closed = false;
+
+  const connect = () => {
+    if (closed) return;
+    source = new EventSource("/api/v1/events/stream");
+    source.addEventListener("ready", () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      retryTimer = undefined;
+      handlers.onReady();
+    });
+    source.addEventListener("notification", (message) => {
+      try {
+        handlers.onEvent(JSON.parse((message as MessageEvent<string>).data));
+      } catch {
+        handlers.onError();
+      }
+    });
+    source.onerror = () => {
       handlers.onError();
-    }
-  });
-  source.onerror = handlers.onError;
-  return () => source.close();
+      source?.close();
+      source = undefined;
+      if (!closed && retryTimer === undefined) {
+        retryTimer = window.setTimeout(() => {
+          retryTimer = undefined;
+          connect();
+        }, 3_000);
+      }
+    };
+  };
+
+  connect();
+  return () => {
+    closed = true;
+    if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    source?.close();
+  };
 }
 
 export async function getHealth(): Promise<HealthData> {

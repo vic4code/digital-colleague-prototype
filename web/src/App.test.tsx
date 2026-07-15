@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -73,6 +73,7 @@ describe("digital colleague chat", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     sessionStorage.clear();
   });
@@ -344,6 +345,22 @@ describe("digital colleague chat", () => {
     expect(
       await screen.findByRole("button", { name: "通知，1 則未讀" }),
     ).toBeInTheDocument();
+  });
+
+  it("recreates the proactive event stream after a connection error", async () => {
+    vi.useFakeTimers();
+    render(<App />);
+    const first = FakeEventSource.instances[0];
+
+    act(() => first.onerror?.(new Event("error")));
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(screen.getByText("通知重新連線中")).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(FakeEventSource.instances).toHaveLength(2);
+    act(() => FakeEventSource.instances[1].emit("ready", { connected: true }));
+    expect(screen.getByText("Ada 已就緒")).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("reports runtime busy without marking Ada offline", async () => {
