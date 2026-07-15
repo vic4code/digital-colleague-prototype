@@ -442,6 +442,23 @@ describe("digital colleague chat", () => {
     expect(screen.getByText("完成登入後，Ada 會自動確認連線狀態。")).toBeInTheDocument();
   });
 
+  it("explains that the Codex runtime account can differ from connector accounts", async () => {
+    sessionStorage.removeItem("digital-colleague-account-confirmed");
+
+    render(<App />);
+
+    expect(
+      await screen.findByText(/這是 Ada 使用的 Codex runtime 帳號/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Gmail 等服務會在各自的官方 OAuth 頁面選擇另一個帳號/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "使用此 Codex 帳號" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/共用帳號，請切換/)).not.toBeInTheDocument();
+  });
+
   it("does not send an empty message", async () => {
     const user = userEvent.setup();
     render(<App />);

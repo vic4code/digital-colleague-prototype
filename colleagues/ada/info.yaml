@@ -8,8 +8,8 @@ accounts:
   # Human-readable identity only; the official Gmail connector owns OAuth.
   gmail:
     provider: gmail
-    address: ada@example.com
-    label: "Ada — Legal inbox"
+    address: cathayaids@gmail.com
+    label: "Ada — Gmail inbox"
 
   # Human-readable identity only; the official Slack connector owns OAuth.
   slack:

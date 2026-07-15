@@ -760,10 +760,16 @@ export function App({ voiceSupported = false }: AppProps) {
       >
         <div className="account-onboarding">
           {runtimeAccount?.account ? (
-            <p>
-              目前已連接 <strong>{runtimeAccount.account.email ?? runtimeAccount.account.type}</strong>。
-              若這是共用帳號，請切換成你自己的帳號。
-            </p>
+            <>
+              <p>
+                <span>這是 Ada 使用的 Codex runtime 帳號：</span>{" "}
+                <strong>{runtimeAccount.account.email ?? runtimeAccount.account.type}</strong>。
+              </p>
+              <p>
+                Gmail 等服務會在各自的官方 OAuth 頁面選擇另一個帳號，
+                不需要為此切換 Codex 帳號。
+              </p>
+            </>
           ) : (
             <p>
               Ada 會透過本機 Codex app-server 工作。請使用你自己的 ChatGPT / Codex
@@ -798,7 +804,7 @@ export function App({ voiceSupported = false }: AppProps) {
                   setAccountDialogOpen(false);
                 }}
               >
-                使用此帳號
+                使用此 Codex 帳號
               </Button>
             )}
             <Button

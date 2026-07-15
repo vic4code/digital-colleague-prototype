@@ -14,10 +14,17 @@ export interface NativeSkillInput {
 
 export type NativeWorkspaceInput = NativeMentionInput | NativeSkillInput;
 
+export interface NativeConnectionAction {
+  label: string;
+  installUrl: string;
+}
+
 export interface NativeWorkspaceSnapshot {
   context: string;
   invocationTokens: string[];
   inputs: NativeWorkspaceInput[];
+  connectionActions: NativeConnectionAction[];
+  accessibleConnectorCount: number;
 }
 
 export interface NativeConnectorSelection {
@@ -476,6 +483,8 @@ export function buildNativeWorkspaceSnapshot(
   ];
   const invocationTokens: string[] = [];
   const inputs: NativeWorkspaceInput[] = [];
+  const connectionActions: NativeConnectionAction[] = [];
+  let accessibleConnectorCount = 0;
   const inputKeys = new Set<string>();
   const apps = (appInventory?.data ?? [])
     .map(parseAppInfo)
@@ -577,6 +586,7 @@ export function buildNativeWorkspaceSnapshot(
         `- ${selection.label} connector：目前在 Codex app 設定中停用。`,
       );
     } else if (appInfo.isAccessible) {
+      accessibleConnectorCount += 1;
       lines.push(
         `- ${selection.label} connector：帳號已連線，可在本回合叫用。`,
       );
@@ -588,13 +598,20 @@ export function buildNativeWorkspaceSnapshot(
     }
 
     const installUrl = appInfo?.installUrl ?? app.installUrl;
-    if (installUrl) lines.push(`- 官方連接頁：${installUrl}`);
+    if (installUrl) {
+      lines.push(`- 官方連接頁：${installUrl}`);
+      if (appInfo?.isEnabled && !appInfo.isAccessible) {
+        connectionActions.push({ label: selection.label, installUrl });
+      }
+    }
   }
 
   return {
     context: lines.join("\n"),
     invocationTokens,
     inputs,
+    connectionActions,
+    accessibleConnectorCount,
   };
 }
 

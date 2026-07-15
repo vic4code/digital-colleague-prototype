@@ -276,6 +276,13 @@ describe("native workspace connector selection", () => {
       "$gmail",
       "$gmail-inbox-triage",
     ]);
+    expect(disconnected.connectionActions).toEqual([
+      {
+        label: "Gmail",
+        installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
+      },
+    ]);
+    expect(disconnected.accessibleConnectorCount).toBe(0);
 
     const connected = buildNativeWorkspaceSnapshot(resolutions, {
       data: [
@@ -292,6 +299,8 @@ describe("native workspace connector selection", () => {
     expect(connected.context).toContain(
       "Gmail connector：帳號已連線，可在本回合叫用",
     );
+    expect(connected.connectionActions).toEqual([]);
+    expect(connected.accessibleConnectorCount).toBe(1);
   });
 
   it("does not inject an unexpected plugin skill from connector metadata", () => {

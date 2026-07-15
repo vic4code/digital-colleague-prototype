@@ -70,7 +70,13 @@ const colleague: Colleague = {
   },
   soul: { markdown: "Be warm and concise." },
   info: {
-    accounts: {},
+    accounts: {
+      gmail: {
+        provider: "gmail",
+        address: "cathayaids@gmail.com",
+        label: "Ada — Gmail inbox",
+      },
+    },
     channels: [{ kind: "web" }],
   },
   skills: [],
@@ -98,6 +104,7 @@ function turn(text: string): Turn {
 function replyToHandshakeAndThread(
   message: ProtocolMessage,
   server: FakeAppServer,
+  appAccessible = false,
 ): boolean {
   if (message.method === "initialize") {
     server.send({
@@ -223,7 +230,7 @@ function replyToHandshakeAndThread(
             name: "Gmail",
             installUrl:
               "https://chatgpt.com/apps/gmail/connector_2128aebfecb84f64a069897515042a44",
-            isAccessible: false,
+            isAccessible: appAccessible,
             isEnabled: true,
           },
         ],
@@ -259,7 +266,11 @@ describe("CodexAppServerRuntime", () => {
         fake.send({
           id: message.id,
           result: {
-            account: { type: "chatgpt", email: "ada@example.com", planType: "plus" },
+            account: {
+              type: "chatgpt",
+              email: "shared-codex@example.com",
+              planType: "plus",
+            },
             requiresOpenaiAuth: true,
           },
         });
@@ -280,7 +291,7 @@ describe("CodexAppServerRuntime", () => {
     await expect(runtime.readAccount()).resolves.toEqual({
       available: true,
       requiresOpenaiAuth: true,
-      account: { type: "chatgpt", email: "ada@example.com" },
+      account: { type: "chatgpt", email: "shared-codex@example.com" },
     });
     await expect(runtime.startLogin("chatgpt")).resolves.toEqual({
       type: "chatgpt",
@@ -302,7 +313,7 @@ describe("CodexAppServerRuntime", () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let turnNumber = 0;
     const server = new FakeAppServer((message, fake) => {
-      if (replyToHandshakeAndThread(message, fake)) return;
+      if (replyToHandshakeAndThread(message, fake, true)) return;
       if (message.method === "turn/start") {
         turnNumber += 1;
         const nativeTurnId = `native-turn-${turnNumber}`;
@@ -383,6 +394,12 @@ describe("CodexAppServerRuntime", () => {
     });
     expect(starts[0]?.params?.developerInstructions).toContain("You are Ada");
     expect(starts[0]?.params?.developerInstructions).toContain(
+      "gmail as cathayaids@gmail.com",
+    );
+    expect(starts[0]?.params?.developerInstructions).toContain(
+      "The Codex login is the runtime control account and may differ",
+    );
+    expect(starts[0]?.params?.developerInstructions).toContain(
       "NATIVE CAPABILITY SNAPSHOT",
     );
     expect(starts[0]?.params?.baseInstructions).toBeUndefined();
@@ -455,7 +472,7 @@ describe("CodexAppServerRuntime", () => {
       "Gmail plugin：已安裝並啟用",
     );
     expect(JSON.stringify(turns[0]?.params?.input)).toContain(
-      "Gmail connector：plugin 已安裝，但目前這個 Codex 登入帳號無法存取",
+      "Gmail connector：帳號已連線，可在本回合叫用",
     );
     expect(JSON.stringify(turns[0]?.params?.input)).toContain(
       "不得說 Gmail plugin 尚未安裝",
@@ -463,6 +480,78 @@ describe("CodexAppServerRuntime", () => {
     expect(JSON.stringify(turns[0]?.params?.input)).toContain(
       "@gmail $gmail $gmail-inbox-triage",
     );
+    await runtime.close();
+  });
+
+  it("returns the official connector OAuth page without starting a model turn", async () => {
+    let appAccessible = false;
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake, appAccessible)) return;
+      if (message.method === "turn/start") {
+        fake.send({
+          id: message.id,
+          result: { turn: { id: "reconnected-turn", status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "reconnected-turn",
+            item: {
+              type: "agentMessage",
+              id: "reconnected-message",
+              text: "Gmail 已連接。",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: {
+              id: "reconnected-turn",
+              status: "completed",
+              items: [],
+            },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    await expect(
+      runtime.respond(
+        colleague,
+        history,
+        turn("幫我整理 Gmail 最近 14 天需要處理的信，未授權就給我 OAuth 連結"),
+      ),
+    ).resolves.toEqual({
+      text:
+        "Gmail plugin 已安裝，但目前這個 Codex 登入帳號還無法存取 Gmail connector。\n\n" +
+        "[連接 Gmail](https://chatgpt.com/apps/gmail/connector_2128aebfecb84f64a069897515042a44)\n\n" +
+        "請在官方頁面完成 OAuth，並選擇你要連接的 Gmail 帳號。完成後回來告訴我「重新檢查 Gmail」。",
+    });
+    expect(
+      server.messages.filter((message) => message.method === "turn/start"),
+    ).toHaveLength(0);
+
+    appAccessible = true;
+    await expect(
+      runtime.respond(colleague, history, turn("重新檢查 Gmail")),
+    ).resolves.toEqual({ text: "Gmail 已連接。" });
+    const appLists = server.messages.filter(
+      (message) => message.method === "app/list",
+    );
+    expect(
+      appLists.slice(-2).map((message) => message.params?.forceRefetch),
+    ).toEqual([true, true]);
+    expect(
+      server.messages.filter((message) => message.method === "turn/start"),
+    ).toHaveLength(1);
     await runtime.close();
   });
 

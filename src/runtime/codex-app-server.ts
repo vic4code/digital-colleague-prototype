@@ -237,15 +237,19 @@ class CodexAppServerClient {
 
     const now = Date.now();
     const cacheKey = `${cwd}\u0000${threadId}\u0000${intentKey}`;
+    const forceRefresh = isConnectorRefreshIntent(text);
     const cached = this.workspaceCache.get(cacheKey);
-    if (cached && cached.expiresAt > now) return cached.value;
+    if (!forceRefresh && cached && cached.expiresAt > now) return cached.value;
 
-    const value = this.resolveNativeWorkspace(cwd, threadId, text).catch(
-      (error: unknown) => {
-        this.workspaceCache.delete(cacheKey);
-        throw error;
-      },
-    );
+    const value = this.resolveNativeWorkspace(
+      cwd,
+      threadId,
+      text,
+      forceRefresh,
+    ).catch((error: unknown) => {
+      this.workspaceCache.delete(cacheKey);
+      throw error;
+    });
     this.workspaceCache.set(cacheKey, {
       expiresAt: now + WORKSPACE_SNAPSHOT_TTL_MS,
       value,
@@ -440,6 +444,7 @@ class CodexAppServerClient {
     cwd: string,
     threadId: string,
     text: string,
+    forceRefresh: boolean,
   ): Promise<NativeWorkspaceSnapshot> {
     let pluginInventory: unknown;
     try {
@@ -478,7 +483,7 @@ class CodexAppServerClient {
     const appIds = nativeAppIds(resolutions);
     const appInventory =
       appIds.length > 0
-        ? await this.resolveNativeApps(threadId, new Set(appIds))
+        ? await this.resolveNativeApps(threadId, new Set(appIds), forceRefresh)
         : undefined;
     return buildNativeWorkspaceSnapshot(resolutions, appInventory);
   }
@@ -486,6 +491,7 @@ class CodexAppServerClient {
   private async resolveNativeApps(
     threadId: string,
     targetIds: Set<string>,
+    forceRefetch: boolean,
   ): Promise<NativeAppInventory> {
     const data: unknown[] = [];
     const found = new Set<string>();
@@ -499,7 +505,7 @@ class CodexAppServerClient {
           cursor,
           limit: 100,
           threadId,
-          forceRefetch: false,
+          forceRefetch,
         });
       } catch {
         return { data, complete: false };
@@ -968,6 +974,24 @@ export class CodexAppServerRuntime implements AgentRuntime {
         this.client.nativeWorkspace(colleague.dir, nativeThreadId, turn.text),
       ]);
 
+      if (
+        workspace.connectionActions.length > 0 &&
+        workspace.accessibleConnectorCount === 0
+      ) {
+        const links = workspace.connectionActions
+          .map(({ label, installUrl }) => `[連接 ${label}](${installUrl})`)
+          .join("\n");
+        const labels = workspace.connectionActions
+          .map(({ label }) => label)
+          .join("、");
+        const text =
+          `${labels} plugin 已安裝，但目前這個 Codex 登入帳號還無法存取 ${labels} connector。\n\n` +
+          `${links}\n\n` +
+          `請在官方頁面完成 OAuth，並選擇你要連接的 ${labels} 帳號。完成後回來告訴我「重新檢查 ${labels}」。`;
+        onDelta?.(text);
+        return { text };
+      }
+
       const prompt = buildTurnPrompt(
         colleague,
         firstTurn ? history : [],
@@ -1028,4 +1052,8 @@ function asCodexError(error: unknown): CodexAppServerError {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isConnectorRefreshIntent(text: string): boolean {
+  return /重新檢查|重新連(?:接|線)|recheck|refresh connector/i.test(text);
 }

@@ -97,7 +97,7 @@ not an OAuth or connector configuration store:
 accounts:
   gmail:                         # 📧 Ada's mailbox
     provider: gmail
-    address: ada@example.com
+    address: cathayaids@gmail.com
   slack:                         # 💬 Ada's Slack presence
     provider: slack
     address: "@ada"
@@ -195,8 +195,10 @@ credentials are required. Stop either development server with `Ctrl+C`.
 
 When the official app-server reports that authentication is required, Ada opens
 an account dialog once per browser session—even if Codex already has an account—
-so the user must confirm the displayed identity or switch away from an inherited
-shared account. **使用 ChatGPT 登入** starts Codex's managed browser OAuth
+so the user can confirm which runtime identity the deployment uses. This Codex
+runtime account is separate from Gmail, Microsoft 365, Slack, and other workspace
+connector accounts; each connector's official OAuth page owns that account
+selection. **使用 ChatGPT 登入** starts Codex's managed browser OAuth
 flow; **使用裝置驗證碼** starts its device-code flow. The frontend only receives
 the authorization URL, login ID, or one-time device code. Passwords, access
 tokens, and API keys are never accepted by this HTTP API. After authorization,
