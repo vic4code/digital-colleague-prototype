@@ -126,30 +126,98 @@ Person + Soul + Info + Memory + Skills  ==  a Colleague
 
 ---
 
-## Quickstart (offline, no keys)
+## Install and quickstart
+
+The fastest way to try the prototype is the local web UI. The browser talks to
+the loopback API, and the API keeps a native Codex app-server thread for Ada.
+
+### Prerequisites
+
+- Node.js **20.19 or newer** and npm
+- [Codex CLI](https://developers.openai.com/codex/cli/) installed and signed in
+- macOS, Linux, or Windows with two terminal windows available
+
+Check the local tools before installing the project:
 
 ```bash
-npm install
-npm run build
-
-# See Ada's assembled identity:
-node dist/cli.js inspect -c colleagues/ada
-node dist/cli.js inspect -c colleagues/ada --prompt   # the full system prompt
-
-# Talk to her in your terminal (echo runtime — no API keys needed):
-DC_AGENT_RUNTIME=echo node dist/cli.js run -c colleagues/ada --channel console
+node --version
+npm --version
+codex --version
+codex login status
 ```
 
-Use Codex as the interactive runtime:
+If Codex is not signed in, run `codex login` and finish the browser sign-in.
+
+### Install
 
 ```bash
-DC_AGENT_RUNTIME=codex CODEX_BIN=codex \
-  node dist/cli.js run -c colleagues/ada --channel console
+git clone https://github.com/vic4code/digital-colleague-prototype.git
+cd digital-colleague-prototype
+npm ci
+```
+
+No `.env` file is required for the default local web experience. The API uses
+`codex` from `PATH`; copy `.env.example` to `.env` only when you need to change
+`CODEX_BIN`, `CODEX_MODEL`, or the runtime.
+
+### Start Ada's API
+
+In terminal 1:
+
+```bash
+npm run dev:api
+```
+
+The API listens only on `http://127.0.0.1:8787`. Confirm it is ready:
+
+```bash
+curl http://127.0.0.1:8787/api/v1/health
+```
+
+### Start the web UI
+
+In terminal 2:
+
+```bash
+npm run dev:web
+```
+
+Open **http://127.0.0.1:5173/** and send Ada a message. Vite proxies browser
+requests under `/api` to the local API on port `8787`, so no browser-side Codex
+credentials are required. Stop either development server with `Ctrl+C`.
+
+### Offline CLI smoke test
+
+Use the echo runtime when Codex is unavailable or when you only want to verify
+the colleague definition without network access:
+
+```bash
+npm run build
+
+# Inspect Ada's assembled identity and prompt.
+node dist/cli.js inspect -c colleagues/ada
+node dist/cli.js inspect -c colleagues/ada --prompt
+
+# Talk through the terminal without an API key.
+DC_AGENT_RUNTIME=echo node dist/cli.js run \
+  -c colleagues/ada --channel console
 ```
 
 Workspace accounts are connected separately through the official plugin OAuth
 UI; do not put Gmail, Outlook, Calendar, Notion, or Slack credentials in
 `.env`. Install the workspace plugin using the commands below.
+
+### Common development commands
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev:api` | Start Ada's loopback API with the Codex runtime |
+| `npm run dev:web` | Start the Vite web UI |
+| `npm test` | Run API and web tests |
+| `npm run typecheck` | Type-check the API and runtime |
+| `npm run typecheck:web` | Type-check the web UI |
+| `npm run build` | Build the API and CLI into `dist/` |
+| `npm run build:web` | Build the web UI into `dist-web/` |
 
 ### CLI
 
@@ -176,14 +244,20 @@ Because every seam is an interface (`Channel`, `AgentRuntime`, `MemoryStore`),
 **a colleague definition runs unchanged on either** — distributing the platform
 is an infrastructure change, not an identity change.
 
-### Proposed portable + Codex-native deployment
+### Portable + Codex-native deployment
 
-The next deployment slice is specified for **Windows native**, **macOS
-native**, and **Docker**, together with a repo marketplace of default plugins,
-a text/voice web channel, scheduled mail/calendar triage, connectors, and a control
-MCP. The first implementation now includes the text/voice frontend and the
-provider-neutral workspace plugin; host installers, the live conversation API,
-and remaining default plugins follow the implementation plan:
+The repository ships **Windows native**, **macOS native**, and **Docker** host
+adapters, plus a Codex repo marketplace. All three run the same built CLI, Ada
+definition, Ant Design web UI, Codex app-server adapter, and persistent memory
+contract; they do not fork business behavior by operating system.
+
+| Host mode | Supervisor | Verification in this repository |
+|-----------|------------|---------------------------------|
+| Docker | Docker Compose | Built and smoke-tested as non-root with a read-only root filesystem, healthcheck, web UI, API turn, and persistent memory |
+| macOS | Per-user LaunchAgent | Installer lifecycle, plist, production install, web/API turn, and persistent memory smoke-tested on macOS |
+| Windows | Per-user Scheduled Task at logon | PowerShell 5.1-compatible scripts and task/security contracts; all scripts pass the PowerShell parser. Native task registration must be verified on Windows |
+
+The design and implementation record is here:
 
 - [Portable deployment and Codex-native spec](docs/spec-portable-codex-native-deployment.md)
 - [Implementation plan](docs/implementation-plan-portable-deployment.md)
@@ -195,20 +269,99 @@ and remaining default plugins follow the implementation plan:
 - [ADR-006: Codex-native Automations first](docs/decisions/ADR-006-codex-native-automations-first.md)
 - [ADR-007: optional event-driven OpenClaw + Codex gateway](docs/decisions/ADR-007-event-driven-openclaw-codex-gateway.md)
 
-### Text and voice frontend prototype
+### Docker
+
+The default Compose runtime is credential-free `echo`, so a clone can prove
+the complete browser-to-memory path first:
 
 ```bash
-npm run dev:api
-# in another terminal
-npm run dev:web
-# open http://127.0.0.1:5173
+docker compose build
+docker compose run --rm ada inspect -c /opt/dcolleague/colleague
+docker compose up -d ada
+docker compose ps
+docker compose logs -f ada
 ```
+
+Open **http://127.0.0.1:8787/**. Identity is mounted read-only; memory and Codex
+state use the `ada-memory` and `ada-codex` volumes. The process runs as UID/GID
+`10001`, drops Linux capabilities, and uses a read-only root filesystem.
+
+For a local Codex deployment, authenticate the container once into its named
+volume, then switch the runtime:
+
+```bash
+# API-key login; the key is read from stdin and is not baked into the image.
+printenv OPENAI_API_KEY | \
+  docker compose run --rm -T --entrypoint codex ada login --with-api-key
+
+DC_AGENT_RUNTIME=codex docker compose up -d ada
+```
+
+`codex login --device-auth` can be used through the same one-off container for
+an interactive developer login. For unattended production, use the deployment
+platform's secret manager instead of copying a developer's entire `~/.codex`.
+
+Stop the service with `docker compose down`. Named volumes are preserved;
+`docker compose down -v` deliberately deletes memory and Codex state.
+
+### macOS installation
+
+Run as the macOS user whose Codex login Ada should use:
+
+```bash
+./deploy/macos/install.sh --colleague ./colleagues/ada
+./deploy/macos/status.sh --id ada
+tail -f "$HOME/Library/Logs/DigitalColleague/ada/stdout.log"
+```
+
+The installer builds a versioned application under
+`~/Library/Application Support/DigitalColleague`, writes a protected
+`env/ada.env`, and loads `com.digitalcolleague.ada` as a LaunchAgent. Re-running
+the installer upgrades the app while preserving the colleague, environment,
+memory, and logs.
+
+```bash
+# Remove the app and LaunchAgent, but preserve Ada's data.
+./deploy/macos/uninstall.sh --id ada
+
+# Explicitly remove Ada's preserved data too.
+./deploy/macos/uninstall.sh --id ada --purge-data
+```
+
+### Windows installation
+
+Run PowerShell as the Windows user whose Codex login Ada should use; WSL is not
+required:
+
+```powershell
+.\deploy\windows\install.ps1 -Colleague .\colleagues\ada
+.\deploy\windows\status.ps1 -Id ada
+Get-Content "$env:LOCALAPPDATA\DigitalColleague\logs\ada\service.log" -Wait
+```
+
+The installer creates a per-user Scheduled Task triggered at logon, with
+bounded restart attempts. The task command contains paths and the colleague id
+only; runtime settings stay in the user-protected `env\ada.env`. Re-running the
+installer upgrades the versioned app without overwriting colleague data.
+
+```powershell
+# Preserve colleague, environment, memory, and logs.
+.\deploy\windows\uninstall.ps1 -Id ada
+
+# Explicitly remove the preserved data too.
+.\deploy\windows\uninstall.ps1 -Id ada -PurgeData
+```
+
+### Text and voice frontend prototype
+
+Follow [Install and quickstart](#install-and-quickstart) to start the API and
+web UI locally.
 
 The responsive single-colleague UI sends text through a loopback-only HTTP
 channel into a long-lived, native Codex `app-server` thread. The browser never
 receives Codex credentials or direct app-server access. Conversation memory is
-kept under the colleague directory and the UI preserves its opaque thread id
-for the browser session.
+kept in the configured writable state directory, and the UI preserves its
+opaque thread id for the browser session.
 
 Browser microphone capture and review-before-send UI are present. A completed
 recording currently targets the bounded `POST /api/v1/audio/transcriptions`
@@ -217,14 +370,20 @@ is the next voice slice. Verify the working text path with `npm test`,
 `npm run typecheck`, `npm run typecheck:web`, `npm run build`, and
 `npm run build:web`.
 
-### Install the Codex-native workspace plugin
+### Install the Codex-native plugins
 
 ```bash
 codex plugin marketplace add .
+codex plugin add digital-colleague-core@digital-colleague-prototype
+codex plugin add digital-colleague-builder@digital-colleague-prototype
+codex plugin add digital-colleague-web@digital-colleague-prototype
 codex plugin add digital-colleague-workspace@digital-colleague-prototype
+codex plugin list
 ```
 
-The plugin adds `workspace-setup`, `inbox-triage`, and `calendar-brief`. Connect
+The default platform set contains core operations, colleague/plugin scaffolding,
+and web-channel guidance. The optional workspace plugin adds `workspace-setup`,
+`inbox-triage`, and `calendar-brief`. Connect
 at least one official email provider (Gmail or Outlook Email) and one official
 calendar provider (Google Calendar or Outlook Calendar) through OAuth in the
 Codex/ChatGPT Apps UI. Notion and Slack are optional. Reusable Scheduled Task
@@ -232,6 +391,12 @@ prompts live under
 `plugins/digital-colleague-workspace/resources/schedule-prompts/`; schedules
 themselves remain visible, revocable user/workspace state rather than plugin
 manifest data.
+
+`ada-legal-ops` is the example domain plugin and stays optional:
+
+```bash
+codex plugin add ada-legal-ops@digital-colleague-prototype
+```
 
 ### Provider events without an open frontend
 
@@ -261,19 +426,62 @@ added.
 
 ---
 
-## How a message flows (standalone)
+## Implementation architecture
 
-```
- human ─▶ channel ─▶ gateway ─▶ agent runtime ─▶ reply ─▶ channel ─▶ human
- (Slack   normalize   recall     assemble prompt   persist
-  Gmail   → Turn)      memory     from Person+       memory
-  console             + dispatch  Soul+Info+Skills   (both sides)
+Yes: this repository is a runnable, single-machine binding of the Phase 0.5
+[one-colleague reference architecture](https://github.com/vic4code/digital-colleagues-architecture/blob/main/phases/0.5/reference-architecture.svg).
+The same layer boundaries are preserved, but the local quickstart collapses
+them into a Vite web process, one Node API/runtime-controller process, and the
+Codex app-server child process instead of deploying every box as a separate
+service.
+
+![Phase 0.5 one-colleague reference architecture](https://raw.githubusercontent.com/vic4code/digital-colleagues-architecture/refs/heads/main/phases/0.5/reference-architecture.svg)
+
+### Local interactive path
+
+```mermaid
+flowchart TB
+    Human[Person / teammate] --> Web[Interaction surface<br/>React + Ant Design in web/]
+    Web -->|POST /api/v1/turns| HTTP[Loopback HTTP boundary<br/>src/http/server.ts]
+    HTTP --> Gateway[Runtime controller<br/>StandaloneGateway]
+    Gateway <--> Memory[Persistent thread memory<br/>writable state directory]
+    Identity[Person + Soul + Info + Skills<br/>colleagues/ada/] --> Gateway
+    Gateway --> Runtime[Codex runtime adapter<br/>CodexAppServerRuntime]
+    Runtime <--> Codex[Codex app-server<br/>thread + turn lifecycle]
+    Codex <--> Tools[Official Codex plugins / MCP tools]
+    Tools <--> Services[Gmail · Outlook · Calendar<br/>Slack · Notion · other services]
+    Services -. provider events .-> OpenClaw[Optional OpenClaw ingress]
+    OpenClaw -. Codex harness .-> Codex
 ```
 
-1. A **channel** (`src/channels/`) normalizes an inbound message into a canonical `Turn`.
-2. The **standalone gateway** (`src/gateway/standalone.ts`) recalls thread **memory** and dispatches.
-3. The **agent runtime** (`src/runtime/`) — **Codex**, or `echo` offline — assembles the prompt from Person + Soul + Info + Skills and replies.
-4. The gateway persists both sides to memory and sends the reply back out.
+A browser message is validated and normalized into a canonical `Turn`; the
+standalone gateway serializes work per thread, recalls memory, and dispatches
+to the runtime adapter. The adapter loads Ada's persona and capabilities into
+a long-lived Codex app-server thread. The reply returns through the same path,
+and a successful human/colleague exchange is appended to memory together.
+
+### Reference layer to repository mapping
+
+| Reference layer | Repository implementation | Status |
+|-----------------|---------------------------|--------|
+| **Human · one interaction surface** | [`web/`](web/) is the primary approved human-facing surface. [`src/channels/console.ts`](src/channels/console.ts) remains a diagnostic CLI channel. | Implemented locally |
+| **Soul** | [`SOUL.md`](colleagues/ada/SOUL.md) defines Ada's voice, values, boundaries, and escalation behavior. | Implemented |
+| **Body** | [`person.yaml`](colleagues/ada/person.yaml) provides stable organizational identity; [`ColleaguePresence.tsx`](web/src/ColleaguePresence.tsx) renders her presence in the UI. | Implemented |
+| **Faculty** | [`prompt.ts`](src/runtime/prompt.ts), [`memory.ts`](src/runtime/memory.ts), and the runtime adapter provide reasoning context and bounded thread recall. | Implemented for local threads |
+| **Skills** | Colleague-local skills live under [`colleagues/ada/skills/`](colleagues/ada/skills/); reusable workspace skills live in [`plugins/digital-colleague-workspace/`](plugins/digital-colleague-workspace/). | Implemented |
+| **Runtime Controller** | [`StandaloneGateway`](src/gateway/standalone.ts), the colleague [`loader`](src/colleague/loader.ts), and [`native-workspace.ts`](src/runtime/native-workspace.ts) own dispatch, persona loading, per-thread serialization, and runtime capability context. | Implemented as one Node process |
+| **Codex app-server** | [`codex-app-server.ts`](src/runtime/codex-app-server.ts) owns initialization plus thread/turn lifecycle over the native stdio protocol. | Implemented through the official Codex runtime |
+| **Event ingress** | [`deploy/openclaw/`](deploy/openclaw/) provides the optional, pinned webhook/channel profile for provider events when no frontend is open. | Optional profile; provider setup still required |
+| **Scheduler** | Reusable prompts are under [`resources/schedule-prompts/`](plugins/digital-colleague-workspace/resources/schedule-prompts/); actual schedules remain visible and revocable in Codex Scheduled Tasks. | Runtime-provided, not a repo scheduler |
+| **Runtime triage policy** | The OpenClaw profile uses fixed routes, allowlists, bounded payloads, and read-only event-worker rules before invoking Codex. | Implemented for the optional event profile |
+| **MCP tool servers** | Gmail, Outlook, Calendar, Slack, and Notion access is provided by official Codex/ChatGPT plugins and their OAuth sessions, rather than reimplemented adapters holding tokens in this repo. | External capability; install and OAuth required |
+| **Access · permissions · audit** | The local API is loopback-only and enforces origin, payload, concurrency, timeout, and stable-error boundaries. Credentials stay outside colleague files; Codex owns action approvals. Conversation memory is auditable, while full event-to-tool-action provenance depends on the optional gateway/runtime audit surface. | Implemented in layers; full end-to-end audit is not claimed |
+
+This mapping is intentionally explicit about ownership: orange/persona work is
+authored here, the runtime and agent engine remain off-the-shelf, and security
+constraints apply across the path. A receiver route, plugin declaration, or
+schedule prompt alone does **not** mean that a provider subscription, OAuth
+connection, or production deployment is complete.
 
 ---
 
@@ -281,6 +489,8 @@ added.
 
 ```
 digital-colleague-prototype/
+├── .agents/plugins/           # Codex marketplace manifest
+├── plugins/                   # default, workspace, and example plugins
 ├── colleagues/ada/            # 👩 the one active colleague (Ada is the example)
 │   ├── person.yaml            #   PERSON
 │   ├── SOUL.md                #   SOUL
@@ -291,7 +501,16 @@ digital-colleague-prototype/
 │   ├── runtime/               # agent runtimes (codex/echo), prompt, memory, secrets
 │   ├── channels/              # console, slack, gmail adapters
 │   ├── gateway/               # standalone (impl) + distributed (stub)
+│   ├── http/                  # same-origin web/API boundary
 │   └── cli.ts                 # `dcolleague`
+├── web/                       # React + Ant Design interaction surface
+├── deploy/
+│   ├── docker/                # container entrypoint + healthcheck
+│   ├── macos/                 # LaunchAgent lifecycle
+│   ├── windows/               # Scheduled Task lifecycle
+│   └── openclaw/              # optional provider-event ingress
+├── Dockerfile
+├── compose.yaml
 └── docs/                      # architecture + colleague spec + deployment
 ```
 
