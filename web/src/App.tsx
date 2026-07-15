@@ -149,12 +149,16 @@ export function App({ voiceSupported = false }: AppProps) {
   useEffect(() => {
     let active = true;
     let checking = false;
+    let retryDelay = 3_000;
+    let timer: number | undefined;
     const check = () => {
       if (checking) return;
       checking = true;
+      let succeeded = false;
       void getHealth().then(
         () => {
           if (!active) return;
+          succeeded = true;
           healthOnlineRef.current = true;
           setRuntimeStatus((current) => {
             if (current === "busy" || current === "reconnecting") return current;
@@ -175,13 +179,16 @@ export function App({ voiceSupported = false }: AppProps) {
         },
       ).finally(() => {
         checking = false;
+        if (!active) return;
+        const nextDelay = retryDelay;
+        retryDelay = succeeded ? 3_000 : Math.min(retryDelay * 2, 30_000);
+        timer = window.setTimeout(check, nextDelay);
       });
     };
     check();
-    const timer = window.setInterval(check, 3_000);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 

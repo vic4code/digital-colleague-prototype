@@ -96,6 +96,7 @@ export function subscribeToProactiveEvents(handlers: {
 }): () => void {
   let source: EventSource | undefined;
   let retryTimer: number | undefined;
+  let retryDelay = 3_000;
   let closed = false;
 
   const connect = () => {
@@ -104,6 +105,7 @@ export function subscribeToProactiveEvents(handlers: {
     source.addEventListener("ready", () => {
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
       retryTimer = undefined;
+      retryDelay = 3_000;
       handlers.onReady();
     });
     source.addEventListener("notification", (message) => {
@@ -118,10 +120,12 @@ export function subscribeToProactiveEvents(handlers: {
       source?.close();
       source = undefined;
       if (!closed && retryTimer === undefined) {
+        const nextDelay = retryDelay;
+        retryDelay = Math.min(retryDelay * 2, 30_000);
         retryTimer = window.setTimeout(() => {
           retryTimer = undefined;
           connect();
-        }, 3_000);
+        }, nextDelay);
       }
     };
   };

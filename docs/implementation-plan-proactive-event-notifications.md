@@ -112,7 +112,7 @@ Acceptance:
 
 - Client preserves structured API error codes.
 - `RUNTIME_BUSY` displays busy and keeps the API online.
-- A low-frequency health monitor forces stale proxy streams to reconnect and
+- A bounded-backoff health monitor forces stale proxy streams to reconnect and
   restores ready state only after the event stream is ready.
 - Event SSE failure displays reconnecting without blocking chat.
 
