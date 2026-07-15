@@ -26,12 +26,13 @@ describe("Codex plugin marketplace packaging", () => {
     plugins: MarketplaceEntry[];
   };
 
-  it("publishes the three credential-free defaults and two optional examples", () => {
+  it("publishes the credential-free defaults and optional workspace bundles", () => {
     expect(marketplace.plugins.map((plugin) => plugin.name)).toEqual([
       "digital-colleague-core",
       "digital-colleague-builder",
       "digital-colleague-web",
       "digital-colleague-workspace",
+      "digital-colleague-m365",
       "ada-legal-ops",
     ]);
     expect(

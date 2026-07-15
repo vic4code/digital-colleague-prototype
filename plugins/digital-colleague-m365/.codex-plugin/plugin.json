@@ -1,0 +1,36 @@
+{
+  "name": "digital-colleague-m365",
+  "version": "0.1.0",
+  "description": "Safe cross-product Microsoft 365 workflows using official Codex Outlook, Teams, and SharePoint connectors.",
+  "author": {
+    "name": "Digital Colleague Prototype Contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "digital-colleague",
+    "microsoft-365",
+    "outlook",
+    "teams",
+    "sharepoint",
+    "onedrive",
+    "planner"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Digital Colleague for Microsoft 365",
+    "shortDescription": "Coordinate Outlook, Teams, SharePoint, OneDrive, and Planner safely.",
+    "longDescription": "Set up and verify the official Outlook Email, Outlook Calendar, Microsoft Teams, and SharePoint connectors, then run bounded Microsoft 365 briefs, meeting follow-ups, and document workflows with review before external writes.",
+    "developerName": "Digital Colleague Prototype Contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Use $m365-workspace-setup to verify my Microsoft 365 connections.",
+      "Use $m365-daily-brief for a bounded Outlook, Teams, Planner, and SharePoint brief.",
+      "Use $m365-meeting-followup to prepare reviewable follow-ups without sending them."
+    ],
+    "brandColor": "#6264A7"
+  }
+}

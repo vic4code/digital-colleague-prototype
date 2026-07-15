@@ -11,6 +11,7 @@ ingress concern; the optional OpenClaw profile is documented under
 | Calendar | Google Calendar or Outlook Calendar | Choose at least one |
 | Knowledge context | Notion | Optional |
 | Conversation context | Slack | Optional |
+| Microsoft 365 suite | Outlook Email, Outlook Calendar, Microsoft Teams, and SharePoint | Use `digital-colleague-m365` for complete M365 setup and cross-product workflows |
 
 The email and calendar choices are independent. A Google mailbox can be used
 with an Outlook calendar, and vice versa. If more than one provider is

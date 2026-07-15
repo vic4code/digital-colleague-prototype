@@ -16,6 +16,9 @@ and [workspace safety boundary](../../resources/safety-boundary.md).
    - calendar: Google Calendar or Outlook Calendar;
    - optional knowledge context: Notion; and
    - optional conversation context: Slack.
+   When the user asks for Microsoft 365 as a suite, route to
+   `$m365-workspace-setup` from `digital-colleague-m365` so Teams,
+   SharePoint/OneDrive, and Planner are verified alongside Outlook.
 2. Collect the intended account address or human-readable account name,
    timezone, and normal workday. Do not ask for a password, token, cookie,
    authorization code, client secret, or pasted OAuth response.
