@@ -1,0 +1,34 @@
+{
+  "name": "digital-colleague-workspace",
+  "version": "0.1.0",
+  "description": "Provider-neutral workspace workflows for one digital colleague using official Codex connectors.",
+  "author": {
+    "name": "Digital Colleague Prototype Contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "digital-colleague",
+    "gmail",
+    "outlook",
+    "calendar",
+    "workspace"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Digital Colleague Workspace",
+    "shortDescription": "Safe inbox and calendar workflows across Google and Microsoft.",
+    "longDescription": "Configure official Gmail or Outlook Email and Google Calendar or Outlook Calendar connectors, then triage mail and prepare calendar briefs with optional Notion and Slack context.",
+    "developerName": "Digital Colleague Prototype Contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Connect my email and calendar providers with read-only checks.",
+      "Use $inbox-triage for recent mail and draft next steps.",
+      "Use $calendar-brief for today's agenda and preparation."
+    ],
+    "brandColor": "#7DD957"
+  }
+}

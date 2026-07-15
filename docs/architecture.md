@@ -58,7 +58,8 @@ Every arrow in that flow is an interface (`Channel`, `AgentRuntime`, `MemoryStor
 
 The architecture glossary names the runtimes explicitly: *"Codex / Claude Code / app-server — vendor agent runtimes we build on (no vendor lock at the platform layer)."* Here that's the `AgentRuntime` interface:
 
-- `CodexRuntime` — binds to the Codex CLI / app-server (`$CODEX_BIN exec`).
+- `CodexAppServerRuntime` — binds to Codex's native long-lived `app-server`
+  JSON-RPC protocol (`initialize`, `thread/start`, `turn/start`).
 - `EchoRuntime` — dependency-free, key-free; proves the platform loop offline.
 - `claude-code` — left as a parallel adapter behind the same interface.
 

@@ -1,0 +1,20 @@
+{
+  "name": "digital-colleague-prototype",
+  "interface": {
+    "displayName": "Digital Colleague Prototype"
+  },
+  "plugins": [
+    {
+      "name": "digital-colleague-workspace",
+      "source": {
+        "source": "local",
+        "path": "./plugins/digital-colleague-workspace"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

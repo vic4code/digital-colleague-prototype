@@ -1,14 +1,13 @@
-# Deployment: Distributed (Phase 3) — designed, not implemented
+# Deployment: Remote/HA (future) — one colleague only
 
-> **Status: NOT implemented in this prototype, by design.**
+> **Status: OUT OF PHASE 0 SCOPE and not implemented.**
 > `src/gateway/distributed.ts` exists as a typed stub that throws with a pointer
-> here. This document commits the shape so the standalone code stays honest
-> about what it collapses.
+> here. Any future implementation must preserve the singleton contract: it may
+> distribute infrastructure for availability, but it still serves one identity.
 
-The distributed deployment is the architecture roadmap's *"enterprise scale,
-1000+ agents, HA"* target. It splits the single standalone process along the
-exact seams the [logical architecture](./architecture.md) already draws — no
-box is invented, each just moves to its own tier.
+This future mode splits the single standalone process along the exact seams the
+[logical architecture](./architecture.md) already draws. It is a scale-up and
+availability option for the same colleague, not a multi-agent or team platform.
 
 ## Topology
 
@@ -18,15 +17,15 @@ box is invented, each just moves to its own tier.
      ▼
 ┌───────────────┐   Turn   ┌────────────────────┐  dispatch  ┌──────────────────┐
 │ EDGE          │ ───────► │ CONTROL PLANE      │ ─────────► │ EXECUTION PLANE  │
-│ channel       │          │ orchestrator:      │  (queue)   │ stateless worker │
-│ ingress pods  │ ◄─────── │ routing, RBAC,     │            │ pool; 1 turn each│
+│ channel       │          │ coordinator:       │  (queue)   │ stateless worker │
+│ ingress pods  │ ◄─────── │ auth, ordering     │            │ pool; 1 turn each│
 │ (slack, gmail)│  events  │ authorization      │ ◄───────── │ + agent runtime  │
 └───────────────┘          └────────────────────┘  stream    └──────────────────┘
         ▲                            │                               │
         └──────── event/stream bus ──┴───────────────────────────────┘
 
    IDENTITY PLANE (networked services, read by workers through interfaces):
-   persona store · soul · info · memory service · skill registry · secret store · RBAC
+   persona store · soul · info · memory service · skill registry · secret store
 
    SHARED BUSINESS STATE:  document/artifact store · work-state (sprint board) · audit log
 ```
@@ -62,4 +61,6 @@ infrastructure change, not an identity change — which is the whole point of th
 - Queue + bus selection (e.g. NATS / SQS + a streaming transport).
 - Worker sandboxing policy (OpenClaw's Docker/SSH sandbox model).
 - HA for the identity/secret stores.
-- Multi-tenant RBAC in the orchestrator.
+- Multi-colleague routing, persistent agent teams, and multi-tenant RBAC are
+  explicitly outside this repository's scope. Ephemeral workers spawned by the
+  root Codex run remain an internal native execution detail.

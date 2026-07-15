@@ -1,16 +1,17 @@
 # Colleague spec
 
 A digital colleague is a **directory**. This is the OpenClaw file-based
-workspace idea: identity is a set of documents on disk, not code. To create a
-new colleague, copy `colleagues/ada/` and edit the files.
+workspace idea: identity is a set of documents on disk, not code. This repo
+loads exactly one active directory. To customize or replace that colleague,
+edit `colleagues/ada/` or replace it with one `colleagues/<id>/` directory.
 
 ```
 colleagues/<id>/
 ├── person.yaml              # PERSON — org-facing identity        (required)
 ├── SOUL.md                  # SOUL   — personality & behavior      (required)
 ├── info.yaml                # INFO   — accounts & channels         (required)
-├── skills/
-│   └── <skill>/SKILL.md     # bundled capabilities                (optional)
+├── .agents/skills/
+│   └── <skill>/SKILL.md     # Codex/OpenClaw AgentSkills          (optional)
 └── memory/
     └── log.jsonl            # written at runtime, git-ignored
 ```
@@ -29,7 +30,7 @@ The org-facing identity. Data an org chart could render.
 | `role` | ✓ | job title |
 | `mandate` | ✓ | one paragraph: what the colleague is accountable for |
 | `team` | | department |
-| `reportsTo` | | human/colleague to escalate to |
+| `reportsTo` | | human supervisor to escalate to |
 | `timezone` | | IANA tz; proactivity respects it |
 | `workingHours` | | `{ start, end, days }` |
 | `pronouns` | | surfaced if the org wants them |
@@ -53,61 +54,50 @@ escalateWhen:      # conditions that trigger hand-off to person.reportsTo
 
 ## `info.yaml` — INFO
 
-The accounts and channels the colleague **is** — the part to pay attention to.
+The declared business identities and local channels the colleague uses.
 
-> **Secrets never live here.** Each account lists the *names* of the env vars /
-> secret-store keys that hold its credentials. That's what lets the whole
-> identity live in git while Gmail and Slack credentials do not.
+> **Secrets never live here.** Official Gmail/Outlook Email,
+> Google/Outlook Calendar, Notion, and Slack connectors own their OAuth state in
+> Codex/ChatGPT. `info.yaml` records human-readable identity and policy only.
 
 ```yaml
 accounts:
-  gmail:                          # account id, referenced by channels
+  gmail:
     provider: gmail
-    address: ada@acme.com
-    scopes: [ https://www.googleapis.com/auth/gmail.modify ]
-    secrets:                      # key → ENV VAR NAME (not the value!)
-      clientId: GMAIL_OAUTH_CLIENT_ID
-      clientSecret: GMAIL_OAUTH_CLIENT_SECRET
-      refreshToken: GMAIL_OAUTH_REFRESH_TOKEN
+    address: ada@example.com
   slack:
     provider: slack
     address: "@ada"
-    secrets:
-      botToken: SLACK_BOT_TOKEN
-      appToken: SLACK_APP_TOKEN
 
 channels:
   - kind: console                 # always available, no creds
     policy: open
-  - kind: slack                   # authenticates as accounts.slack
-    account: slack
-    policy: pairing               # pairing | open | allowlist
-    allow: [ elena@acme.com, "#legal-intake" ]
-  - kind: gmail
-    account: gmail
-    policy: allowlist
-    allow: [ "*@acme.com" ]
 
 permissions:                      # coarse RBAC scopes for the control plane
   - contracts:redline
   - email:draft
 ```
 
-Verify an account's secrets resolve without starting the colleague:
+`doctor` validates any optional legacy adapter secret references that an
+adopter explicitly adds; the default official connectors have no repository
+secret references to resolve:
 
 ```bash
 dcolleague doctor -c colleagues/ada
 ```
 
-## `skills/<name>/SKILL.md`
+## `.agents/skills/<name>/SKILL.md`
 
-Same shape as OpenClaw skills: an optional `name` / `summary` header and a
-markdown procedure injected when the skill is relevant.
+Use the shared AgentSkills shape recognized by Codex and OpenClaw. `name` and
+`description` are required; optional `scripts/`, `references/`, and `assets/`
+stay beside `SKILL.md`. The prototype loader temporarily accepts the legacy
+`skills/<name>/SKILL.md` and `summary`, but new work must use this native path
+and metadata.
 
 ```yaml
 ---
 name: contract-review
-summary: First-pass contract triage and redlining against the playbook.
+description: First-pass contract triage and redlining against the playbook.
 ---
 # procedure…
 ```

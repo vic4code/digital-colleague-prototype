@@ -1,57 +1,29 @@
-# INFO — the accounts and channels Ada *is*.
+# INFO — Ada's declared business identities and local channel policy.
 #
-# IMPORTANT: no secret values live here. Each account lists the *names* of the
-# environment variables (or secret-store keys) that hold its credentials. This
-# is what lets Ada's whole identity — Person, Soul, Info — live in git while her
-# Gmail and Slack credentials never do. Run `dcolleague doctor -c colleagues/ada`
-# to check they resolve.
+# Phase 0 authenticates Gmail/Outlook Email, Google/Outlook Calendar, Notion,
+# and Slack with their official Codex/ChatGPT OAuth connectors. OAuth sessions,
+# passwords, tokens, and connector account state never live in this file.
 
 accounts:
-  # Ada's own mailbox. She reads and (with approval) sends as this address.
+  # Human-readable identity only; the official Gmail connector owns OAuth.
   gmail:
     provider: gmail
-    address: ada@acme.com
+    address: ada@example.com
     label: "Ada — Legal inbox"
-    scopes:
-      - https://www.googleapis.com/auth/gmail.modify
-    secrets:
-      clientId: GMAIL_OAUTH_CLIENT_ID
-      clientSecret: GMAIL_OAUTH_CLIENT_SECRET
-      refreshToken: GMAIL_OAUTH_REFRESH_TOKEN
 
-  # Ada's Slack presence in the ACME workspace.
+  # Human-readable identity only; the official Slack connector owns OAuth.
   slack:
     provider: slack
     address: "@ada"
     label: "ACME workspace"
-    scopes:
-      - chat:write
-      - im:history
-      - channels:history
-    secrets:
-      botToken: SLACK_BOT_TOKEN
-      appToken: SLACK_APP_TOKEN
-      signingSecret: SLACK_SIGNING_SECRET
 
 channels:
   # Local/dev presence — always available, no credentials.
   - kind: console
     policy: open
 
-  # Reachable in Slack; only paired humans may DM her.
-  - kind: slack
-    account: slack
-    policy: pairing
-    allow:
-      - elena@acme.com
-      - "#legal-intake"
-
-  # Reachable by email at her mailbox.
-  - kind: gmail
-    account: gmail
-    policy: allowlist
-    allow:
-      - "*@acme.com"
+  # Workspace access is invoked through official Codex plugins, not these
+  # legacy in-process channel adapters.
 
 # Coarse business-level authorization (RBAC) scopes for the control plane.
 permissions:

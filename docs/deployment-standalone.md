@@ -35,10 +35,10 @@ same way OpenClaw supervises its gateway — a user service:
 - A container: `node dist/cli.js run -c /colleagues/ada` as the entrypoint,
   with secrets injected as environment variables.
 
-One process serves **one colleague** across all its channels. To run several
-colleagues, run several processes (or containers) — one per colleague
-directory. That per-colleague isolation is exactly the seam the distributed
-deployment formalizes.
+One process serves **one colleague** across all its channels. A second active
+colleague, colleague registry, or colleague-to-colleague routing is outside
+this repository's contract. Someone who needs another independent colleague
+uses a separate clone and deployment; this repo does not coordinate them.
 
 ## Operations
 
