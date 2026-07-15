@@ -446,13 +446,16 @@ class CodexAppServerClient {
         if (
           selection.installed !== true ||
           selection.enabled !== true ||
-          !selection.marketplacePath
+          (!selection.marketplacePath && !selection.remoteMarketplaceName)
         ) {
           return { selection };
         }
         try {
+          const pluginSource = selection.marketplacePath
+            ? { marketplacePath: selection.marketplacePath }
+            : { remoteMarketplaceName: selection.remoteMarketplaceName };
           const detail = await this.request<unknown>("plugin/read", {
-            marketplacePath: selection.marketplacePath,
+            ...pluginSource,
             pluginName: selection.pluginName,
           });
           return { selection, detail };

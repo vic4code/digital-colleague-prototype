@@ -24,6 +24,7 @@ export interface NativeConnectorSelection {
   label: string;
   marketplaceName: string;
   marketplacePath?: string;
+  remoteMarketplaceName?: string;
   pluginName: string;
   installed?: boolean;
   enabled?: boolean;
@@ -109,6 +110,7 @@ const M365_WORKFLOW: ConnectorSpec = {
 interface InstalledPlugin {
   marketplaceName: string;
   marketplacePath?: string;
+  remoteMarketplaceName?: string;
   pluginName: string;
   installed: boolean;
   enabled: boolean;
@@ -157,6 +159,13 @@ function installedPlugins(value: unknown): InstalledPlugin[] | undefined {
       typeof rawMarketplace.path === "string" && isAbsolute(rawMarketplace.path)
         ? rawMarketplace.path
         : undefined;
+    const remoteMarketplaceName =
+      !marketplacePath && rawMarketplace.name.endsWith("-remote")
+        ? rawMarketplace.name
+        : undefined;
+    const marketplaceName = remoteMarketplaceName
+      ? rawMarketplace.name.slice(0, -"-remote".length)
+      : rawMarketplace.name;
     for (const rawPlugin of rawMarketplace.plugins) {
       if (
         !isRecord(rawPlugin) ||
@@ -167,8 +176,9 @@ function installedPlugins(value: unknown): InstalledPlugin[] | undefined {
         continue;
       }
       plugins.push({
-        marketplaceName: rawMarketplace.name,
+        marketplaceName,
         marketplacePath,
+        remoteMarketplaceName,
         pluginName: rawPlugin.name,
         installed: rawPlugin.installed,
         enabled: rawPlugin.enabled,
@@ -330,6 +340,7 @@ export function selectNativeConnectors(
       label: connector.label,
       marketplaceName: connector.marketplaceName,
       marketplacePath: plugin?.marketplacePath,
+      remoteMarketplaceName: plugin?.remoteMarketplaceName,
       pluginName: connector.pluginName,
       installed: installed ? (plugin?.installed ?? false) : undefined,
       enabled: installed ? (plugin?.enabled ?? false) : undefined,

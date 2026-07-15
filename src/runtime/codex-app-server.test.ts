@@ -420,6 +420,115 @@ describe("CodexAppServerRuntime", () => {
     await runtime.close();
   });
 
+  it("reads installed connectors from a remote curated marketplace", async () => {
+    const server = new FakeAppServer((message, fake) => {
+      if (message.method === "plugin/installed") {
+        fake.send({
+          id: message.id,
+          result: {
+            marketplaces: [
+              {
+                name: "openai-curated-remote",
+                path: null,
+                plugins: [
+                  {
+                    name: "gmail",
+                    installed: true,
+                    enabled: true,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        return;
+      }
+      if (message.method === "plugin/read") {
+        fake.send({
+          id: message.id,
+          result: {
+            plugin: {
+              apps: [{ id: "connector_gmail", name: "Gmail" }],
+              skills: [
+                {
+                  name: "gmail:gmail",
+                  path: "/tmp/plugins/gmail/skills/gmail/SKILL.md",
+                  enabled: true,
+                },
+              ],
+            },
+          },
+        });
+        return;
+      }
+      if (message.method === "app/list") {
+        fake.send({
+          id: message.id,
+          result: {
+            data: [
+              {
+                id: "connector_gmail",
+                name: "Gmail",
+                isAccessible: true,
+                isEnabled: true,
+              },
+            ],
+            nextCursor: null,
+          },
+        });
+        return;
+      }
+      if (replyToHandshakeAndThread(message, fake)) return;
+      if (message.method === "turn/start") {
+        fake.send({
+          id: message.id,
+          result: { turn: { id: "remote-plugin-turn", status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "remote-plugin-turn",
+            item: {
+              type: "agentMessage",
+              id: "remote-plugin-message",
+              text: "Connected.",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: {
+              id: "remote-plugin-turn",
+              status: "completed",
+              items: [],
+            },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    await expect(
+      runtime.respond(colleague, [], turn("用 Gmail 找最近的郵件")),
+    ).resolves.toEqual({ text: "Connected." });
+    expect(
+      server.messages.find((message) => message.method === "plugin/read")
+        ?.params,
+    ).toEqual({
+      remoteMarketplaceName: "openai-curated-remote",
+      pluginName: "gmail",
+    });
+
+    await runtime.close();
+  });
+
   it("streams visible answer deltas before the turn completes", async () => {
     let nativeTurnId = "";
     const server = new FakeAppServer((message, fake) => {

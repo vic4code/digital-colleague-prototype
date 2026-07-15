@@ -19,6 +19,16 @@ const pluginInventory = {
   ],
 };
 
+const remotePluginInventory = {
+  marketplaces: [
+    {
+      name: "openai-curated-remote",
+      path: null,
+      plugins: [{ name: "gmail", installed: true, enabled: true }],
+    },
+  ],
+};
+
 const m365PluginInventory = {
   marketplaces: [
     {
@@ -80,6 +90,21 @@ describe("native workspace connector selection", () => {
         (selection) => selection.pluginName,
       ),
     ).toEqual(["gmail", "google-calendar"]);
+  });
+
+  it("recognizes installed connectors from the remote curated marketplace", () => {
+    const [selection] = selectNativeConnectors(
+      remotePluginInventory,
+      "用 Gmail 找最近的郵件",
+    );
+
+    expect(selection).toMatchObject({
+      marketplaceName: "openai-curated",
+      remoteMarketplaceName: "openai-curated-remote",
+      pluginName: "gmail",
+      installed: true,
+      enabled: true,
+    });
   });
 
   it("keeps generic Gmail and inbox triage workspace caches separate", () => {
