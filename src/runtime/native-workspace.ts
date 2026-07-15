@@ -68,6 +68,16 @@ const CONNECTORS: readonly ConnectorSpec[] = [
     pluginName: "outlook-calendar",
   },
   {
+    label: "Teams",
+    marketplaceName: "openai-curated",
+    pluginName: "teams",
+  },
+  {
+    label: "SharePoint",
+    marketplaceName: "openai-curated",
+    pluginName: "sharepoint",
+  },
+  {
     label: "Slack",
     marketplaceName: "openai-curated",
     pluginName: "slack",
@@ -153,8 +163,10 @@ function installedPlugins(value: unknown): InstalledPlugin[] | undefined {
 
 function requestedSpecs(text: string): ConnectorSpec[] {
   const selected = new Set<string>();
+  const m365 =
+    /\b(?:microsoft|office)\s*365\b|\bm365\b|微軟\s*365/i.test(text);
   const dailyBrief =
-    /(?:今天|今日).{0,16}(?:最重要|重點|三件事|待辦|優先|安排)|(?:整理|列出).{0,8}(?:今天|今日)/i.test(
+    /(?:今天|今日).{0,16}(?:最重要|重點|三件事|待辦|優先|安排|摘要|簡報)|(?:整理|列出|摘要).{0,8}(?:今天|今日)|\bdaily\s+(?:brief|digest)\b/i.test(
       text,
     );
   const outlook = /\boutlook\b/i.test(text);
@@ -165,7 +177,12 @@ function requestedSpecs(text: string): ConnectorSpec[] {
   const calendar =
     /\bcalendar\b|行事曆|日曆|行程|會議|約會|排程/i.test(text);
 
-  if (dailyBrief) {
+  if (m365) {
+    selected.add("outlook-email");
+    selected.add("outlook-calendar");
+    selected.add("teams");
+    selected.add("sharepoint");
+  } else if (dailyBrief) {
     selected.add("gmail");
     selected.add("google-calendar");
   }
@@ -173,6 +190,12 @@ function requestedSpecs(text: string): ConnectorSpec[] {
   if (outlook && calendar) selected.add("outlook-calendar");
   if (!outlook && email) selected.add("gmail");
   if (!outlook && calendar) selected.add("google-calendar");
+  if (/\b(?:microsoft\s+)?teams\b|\bplanner\b|Teams\s*(?:訊息|聊天|頻道|會議)/i.test(text)) {
+    selected.add("teams");
+  }
+  if (/\bsharepoint\b|\bone\s*drive\b|\bonedrive\b|SharePoint|OneDrive/i.test(text)) {
+    selected.add("sharepoint");
+  }
   if (/\bslack\b/i.test(text)) selected.add("slack");
   if (/\bnotion\b|Notion|卡片|知識庫/i.test(text)) selected.add("notion");
 
@@ -186,6 +209,33 @@ function preferredSkillSuffixes(pluginName: string, text: string): string[] {
         text,
       );
     return triage ? ["gmail-inbox-triage", "gmail"] : ["gmail"];
+  }
+  if (pluginName === "outlook-email") {
+    const triage =
+      /處理|整理|摘要|重點|重要|優先|未讀|收件匣|\binbox\b|待回覆|\bbrief\b|\bdigest\b/i.test(
+        text,
+      );
+    return triage
+      ? ["outlook-email-inbox-triage", "outlook-email"]
+      : ["outlook-email"];
+  }
+  if (pluginName === "outlook-calendar") {
+    const daily =
+      /今天|今日|明天|明日|摘要|重點|安排|\bdaily\b|\bbrief\b|\bagenda\b/i.test(
+        text,
+      );
+    return daily
+      ? ["outlook-calendar-daily-brief", "outlook-calendar"]
+      : ["outlook-calendar"];
+  }
+  if (pluginName === "teams") {
+    if (/\bplanner\b|Planner|任務|待辦/i.test(text)) {
+      return ["teams-planner-task-management", "teams"];
+    }
+    if (/今天|今日|摘要|重點|\bdaily\b|\bdigest\b/i.test(text)) {
+      return ["teams-daily-digest", "teams"];
+    }
+    return ["teams"];
   }
   return [pluginName];
 }

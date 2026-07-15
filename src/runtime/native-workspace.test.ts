@@ -19,6 +19,21 @@ const pluginInventory = {
   ],
 };
 
+const m365PluginInventory = {
+  marketplaces: [
+    {
+      name: "openai-curated",
+      path: "/tmp/openai-curated/.agents/plugins/marketplace.json",
+      plugins: [
+        { name: "outlook-email", installed: true, enabled: true },
+        { name: "outlook-calendar", installed: true, enabled: true },
+        { name: "teams", installed: true, enabled: true },
+        { name: "sharepoint", installed: true, enabled: true },
+      ],
+    },
+  ],
+};
+
 const gmailDetail = {
   plugin: {
     apps: [
@@ -62,6 +77,106 @@ describe("native workspace connector selection", () => {
     );
     expect(nativeConnectorIntentKey("整理 Gmail 收件匣的待回覆信件")).toBe(
       "gmail:gmail-inbox-triage",
+    );
+  });
+
+  it("selects the complete official M365 connector set for a Microsoft 365 brief", () => {
+    const text = "幫我做 Microsoft 365 今日工作摘要";
+
+    expect(nativeConnectorIntentKey(text)).toBe(
+      "outlook-email:outlook-email-inbox-triage," +
+        "outlook-calendar:outlook-calendar-daily-brief," +
+        "teams:teams-daily-digest,sharepoint",
+    );
+    expect(
+      selectNativeConnectors(m365PluginInventory, text).map(
+        (selection) => selection.pluginName,
+      ),
+    ).toEqual([
+      "outlook-email",
+      "outlook-calendar",
+      "teams",
+      "sharepoint",
+    ]);
+  });
+
+  it("routes OneDrive through SharePoint and Planner through Teams", () => {
+    expect(nativeConnectorIntentKey("找 OneDrive 最近的專案文件")).toBe(
+      "sharepoint",
+    );
+    expect(nativeConnectorIntentKey("整理 Teams Planner 的待辦")).toBe(
+      "teams:teams-planner-task-management",
+    );
+  });
+
+  it("uses M365 workflow skills without confusing plugin and account state", () => {
+    const selections = selectNativeConnectors(
+      m365PluginInventory,
+      "整理 Teams 今日訊息和 SharePoint 文件",
+    );
+    const details = {
+      teams: {
+        plugin: {
+          apps: [{ id: "connector_teams", name: "Teams" }],
+          skills: [
+            {
+              name: "teams:teams-daily-digest",
+              path: "/tmp/plugins/teams/skills/teams-daily-digest/SKILL.md",
+              enabled: true,
+            },
+          ],
+        },
+      },
+      sharepoint: {
+        plugin: {
+          apps: [{ id: "connector_sharepoint", name: "SharePoint" }],
+          skills: [
+            {
+              name: "sharepoint:sharepoint",
+              path: "/tmp/plugins/sharepoint/skills/sharepoint/SKILL.md",
+              enabled: true,
+            },
+          ],
+        },
+      },
+    };
+    const resolutions = selections.map((selection) => ({
+      selection,
+      detail: details[selection.pluginName as keyof typeof details],
+    }));
+
+    const snapshot = buildNativeWorkspaceSnapshot(resolutions, {
+      data: [
+        {
+          id: "connector_teams",
+          isAccessible: true,
+          isEnabled: true,
+        },
+        {
+          id: "connector_sharepoint",
+          isAccessible: false,
+          isEnabled: true,
+        },
+      ],
+      complete: true,
+    });
+
+    expect(nativeAppIds(resolutions)).toEqual([
+      "connector_teams",
+      "connector_sharepoint",
+    ]);
+    expect(snapshot.invocationTokens).toEqual([
+      "@teams",
+      "$teams",
+      "$teams-daily-digest",
+      "@sharepoint",
+      "$sharepoint",
+    ]);
+    expect(snapshot.context).toContain(
+      "Teams connector：帳號已連線，可在本回合叫用",
+    );
+    expect(snapshot.context).toContain(
+      "SharePoint plugin 已安裝，但目前這個 Codex 登入帳號無法存取 SharePoint connector",
     );
   });
 
