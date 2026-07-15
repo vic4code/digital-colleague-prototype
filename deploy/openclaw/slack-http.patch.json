@@ -1,0 +1,29 @@
+{
+  "channels": {
+    "slack": {
+      "enabled": false,
+      "mode": "http",
+      "botToken": {
+        "source": "env",
+        "provider": "default",
+        "id": "SLACK_BOT_TOKEN"
+      },
+      "signingSecret": {
+        "source": "env",
+        "provider": "default",
+        "id": "SLACK_SIGNING_SECRET"
+      },
+      "webhookPath": "/slack/events",
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        "U0000000000"
+      ],
+      "groupPolicy": "allowlist",
+      "channels": {
+        "C0000000000": {
+          "requireMention": true
+        }
+      }
+    }
+  }
+}

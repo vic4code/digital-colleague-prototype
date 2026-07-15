@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "enabled": false
+  },
+  "channels": {
+    "slack": {
+      "enabled": false
+    }
+  },
+  "tools": {
+    "exec": {
+      "mode": "auto"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "codex": {
+        "config": {
+          "appServer": {
+            "homeScope": "user",
+            "sandbox": "workspace-write"
+          },
+          "computerUse": {
+            "enabled": true,
+            "autoInstall": true
+          }
+        }
+      }
+    }
+  }
+}
