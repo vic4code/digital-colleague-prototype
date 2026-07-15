@@ -18,7 +18,7 @@ const LOCAL_ORIGIN = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d{1,5})?$/;
 export type TurnServer = Server<typeof IncomingMessage, typeof ServerResponse>;
 
 export interface TurnServerOptions {
-  dispatch(turn: Turn): Promise<Reply>;
+  dispatch(turn: Turn, onDelta?: (delta: string) => void): Promise<Reply>;
   colleague: { id: string; name: string };
   runtime: string;
   timeoutMs?: number;
@@ -145,6 +145,21 @@ function sendError(
   sendJson(response, status, { error: { code, message } });
 }
 
+function startEventStream(response: ServerResponse): void {
+  securityHeaders(response);
+  response.statusCode = 200;
+  response.setHeader("content-type", "text/event-stream; charset=utf-8");
+  response.setHeader("connection", "keep-alive");
+  response.setHeader("x-accel-buffering", "no");
+  response.flushHeaders();
+}
+
+function sendEvent(response: ServerResponse, value: unknown): void {
+  if (!response.destroyed && !response.writableEnded) {
+    response.write(`data: ${JSON.stringify(value)}\n\n`);
+  }
+}
+
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -259,8 +274,21 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
       }
 
       const turn = makeTurn("web", body.threadId, "local-user", body.text);
+      const stream = request.headers.accept
+        ?.toLowerCase()
+        .includes("text/event-stream");
       inFlight += 1;
-      const work = Promise.resolve().then(() => options.dispatch(turn));
+      if (stream) {
+        startEventStream(response);
+        sendEvent(response, { type: "start", threadId: body.threadId });
+      }
+      const work = Promise.resolve().then(() =>
+        stream
+          ? options.dispatch(turn, (delta) =>
+              sendEvent(response, { type: "delta", delta }),
+            )
+          : options.dispatch(turn),
+      );
       const tracked = work.finally(() => {
         inFlight -= 1;
       });
@@ -268,6 +296,15 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
       // rejection so it can never become an unhandled process error.
       void tracked.catch(() => {});
       const reply = await withTimeout(tracked, timeoutMs);
+      if (stream) {
+        sendEvent(response, {
+          type: "done",
+          threadId: body.threadId,
+          reply: { text: reply.text },
+        });
+        response.end();
+        return;
+      }
       sendJson(response, 200, {
         data: {
           threadId: body.threadId,
@@ -275,6 +312,15 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
         },
       });
     } catch (error) {
+      if (response.headersSent) {
+        const message =
+          error instanceof RuntimeTimeoutError
+            ? "Ada took too long to answer. Please try again."
+            : "Ada could not answer this message.";
+        sendEvent(response, { type: "error", message });
+        response.end();
+        return;
+      }
       if (error instanceof HttpError) {
         sendError(response, error.status, error.code, error.message);
         return;

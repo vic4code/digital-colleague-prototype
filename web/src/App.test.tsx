@@ -86,6 +86,58 @@ describe("digital colleague chat", () => {
     expect(composer).toHaveValue("");
   });
 
+  it("renders streamed answer text before the turn completes", async () => {
+    const encoder = new TextEncoder();
+    let streamController!: ReadableStreamDefaultController<Uint8Array>;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith("/api/v1/health")) {
+        return jsonResponse({
+          data: {
+            status: "ok",
+            runtime: "codex-app-server",
+            colleague: { id: "ada", name: "Ada" },
+          },
+        });
+      }
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+        },
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText("傳訊息給 Ada"), "hello");
+    await user.click(screen.getByRole("button", { name: "送出訊息" }));
+    streamController.enqueue(
+      encoder.encode(
+        'data: {"type":"start","threadId":"web:0f289a92-7255-49f8-8332-e9f530d8f63c"}\n\n',
+      ),
+    );
+    streamController.enqueue(
+      encoder.encode('data: {"type":"delta","delta":"收"}\n\n'),
+    );
+
+    expect(await screen.findByText("收")).toBeInTheDocument();
+
+    streamController.enqueue(
+      encoder.encode('data: {"type":"delta","delta":"到"}\n\n'),
+    );
+    streamController.enqueue(
+      encoder.encode(
+        'data: {"type":"done","threadId":"web:0f289a92-7255-49f8-8332-e9f530d8f63c","reply":{"text":"收到"}}\n\n',
+      ),
+    );
+    streamController.close();
+
+    expect(await screen.findByText("收到")).toBeInTheDocument();
+  });
+
   it("renders Ada's connector guidance as a safe, readable link", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       if (String(input).endsWith("/api/v1/health")) {

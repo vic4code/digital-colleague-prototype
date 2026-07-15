@@ -141,25 +141,56 @@ export function App({ voiceSupported = false }: AppProps) {
     if (!text || isSending) return;
 
     followConversationRef.current = true;
+    const humanMessageId = Date.now();
+    const adaMessageId = humanMessageId + 1;
     setMessages((current) => [
       ...current,
-      { id: Date.now(), role: "human", text, time: "現在" },
+      { id: humanMessageId, role: "human", text, time: "現在" },
     ]);
     setDraft("");
     setNotice("Ada 正在思考…");
     setIsSending(true);
+    let streamedText = "";
     try {
-      const result = await postTurn(text, threadId);
+      const result = await postTurn(text, threadId, (delta) => {
+        streamedText += delta;
+        setMessages((current) => {
+          const existing = current.findIndex(
+            (message) => message.id === adaMessageId,
+          );
+          if (existing < 0) {
+            return [
+              ...current,
+              { id: adaMessageId, role: "ada", text: streamedText, time: "現在" },
+            ];
+          }
+          return current.map((message) =>
+            message.id === adaMessageId
+              ? { ...message, text: streamedText }
+              : message,
+          );
+        });
+        setNotice("");
+      });
       setThreadId(result.threadId);
       try {
         sessionStorage.setItem("digital-colleague-thread", result.threadId);
       } catch {
         // Conversation still works if browser storage is unavailable.
       }
-      setMessages((current) => [
-        ...current,
-        { id: Date.now() + 1, role: "ada", text: result.reply.text, time: "現在" },
-      ]);
+      setMessages((current) => {
+        const finalMessage = {
+          id: adaMessageId,
+          role: "ada" as const,
+          text: result.reply.text,
+          time: "現在",
+        };
+        return current.some((message) => message.id === adaMessageId)
+          ? current.map((message) =>
+              message.id === adaMessageId ? finalMessage : message,
+            )
+          : [...current, finalMessage];
+      });
       setNotice("");
       setRuntimeStatus("ready");
     } catch (error) {

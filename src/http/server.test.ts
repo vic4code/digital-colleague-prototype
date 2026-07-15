@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 async function start(
-  dispatch: (turn: Turn) => Promise<Reply>,
+  dispatch: (turn: Turn, onDelta?: (delta: string) => void) => Promise<Reply>,
   options: { timeoutMs?: number; maxConcurrent?: number; webRoot?: string } = {},
 ) {
   const server = createTurnServer({
@@ -125,6 +125,31 @@ describe("localhost turn API", () => {
         text: "Can you hear me?",
       }),
     );
+  });
+
+  it("streams answer deltas over SSE", async () => {
+    const url = await start(async (_turn, onDelta) => {
+      onDelta?.("收");
+      onDelta?.("到");
+      return { text: "收到" };
+    });
+
+    const response = await fetch(`${url}/api/v1/turns`, {
+      method: "POST",
+      headers: {
+        accept: "text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ text: "hello" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const stream = await response.text();
+    expect(stream).toContain('"type":"start"');
+    expect(stream).toContain('"type":"delta","delta":"收"');
+    expect(stream).toContain('"type":"delta","delta":"到"');
+    expect(stream).toContain('"type":"done"');
   });
 
   it("continues a caller's existing thread", async () => {

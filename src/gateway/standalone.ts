@@ -45,9 +45,14 @@ export class StandaloneGateway {
   }
 
   /** The single dispatch path every channel funnels a Turn through. */
-  dispatch = (turn: Turn): Promise<Reply> => {
+  dispatch = (
+    turn: Turn,
+    onDelta?: (delta: string) => void,
+  ): Promise<Reply> => {
     const previous = this.threadQueues.get(turn.threadId) ?? Promise.resolve();
-    const result = previous.catch(() => {}).then(() => this.handleTurn(turn));
+    const result = previous
+      .catch(() => {})
+      .then(() => this.handleTurn(turn, onDelta));
     const settled = result.then(
       () => undefined,
       () => undefined,
@@ -61,12 +66,20 @@ export class StandaloneGateway {
     return result;
   };
 
-  private handleTurn = async (turn: Turn): Promise<Reply> => {
+  private handleTurn = async (
+    turn: Turn,
+    onDelta?: (delta: string) => void,
+  ): Promise<Reply> => {
     // Recall thread history (memory plane).
     const history = this.memory.recall(turn.threadId);
 
     // Execute the turn (execution plane).
-    const reply = await this.runtime.respond(this.colleague, history, turn);
+    const reply = await this.runtime.respond(
+      this.colleague,
+      history,
+      turn,
+      onDelta,
+    );
 
     // Persist a complete exchange together. Failed runtime calls leave no
     // orphaned human message that would confuse the next turn.
