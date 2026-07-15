@@ -27,9 +27,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.3.2",
+    "antd": "^6.5.1",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
-    "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "yaml": "^2.5.1"

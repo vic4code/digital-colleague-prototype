@@ -48,7 +48,7 @@ describe("digital colleague chat", () => {
     expect(screen.getByText("和你一起工作")).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: "Ada，你的數位同事" }),
-    ).toHaveAttribute("src", "/ada-executive-three-quarter.webp");
+    ).toHaveAttribute("src", "/ada-illustrated-full.webp");
     expect(
       screen.getByText(/嗨，我是 Ada。/),
     ).toBeInTheDocument();

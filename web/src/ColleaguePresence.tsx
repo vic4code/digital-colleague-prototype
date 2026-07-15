@@ -1,4 +1,11 @@
-import { BookOpen, Calendar, Mail, MonitorCog } from "lucide-react";
+import {
+  CalendarOutlined,
+  DesktopOutlined,
+  MailOutlined,
+  NumberOutlined,
+  ReadOutlined,
+} from "@ant-design/icons";
+import { Collapse, Tag } from "antd";
 
 export type RuntimeStatus = "checking" | "ready" | "offline";
 export type ActivityKind = "available" | "thinking" | "listening" | "attention";
@@ -31,8 +38,10 @@ export function ColleaguePresence({
     <aside className={`colleague-stage ${activity.kind}`} aria-labelledby="colleague-name">
       <div className="stage-identity">
         <p className="eyebrow">和你一起工作</p>
-        <h1 id="colleague-name">Ada</h1>
-        <p className="role-title">法務營運分析師</p>
+        <div className="identity-heading">
+          <h1 id="colleague-name">Ada</h1>
+          <Tag variant="filled" color="green">法務營運分析師</Tag>
+        </div>
         <p className={`presence ${runtimeStatus}`}>
           <span aria-hidden="true" />
           {presenceLabel}
@@ -48,7 +57,6 @@ export function ColleaguePresence({
       </div>
 
       <div className="character-scene" aria-label="Ada 目前的工作狀態">
-        <div className="scene-grid" aria-hidden="true" />
         <div className="scene-glow" aria-hidden="true" />
         <div className="focus-card">
           <div className="focus-card-header">
@@ -62,11 +70,10 @@ export function ColleaguePresence({
         <div className="character-render">
           <span className="character-aura" aria-hidden="true" />
           <picture className="character-art">
-            <source media="(max-width: 600px)" srcSet="/ada-executive-portrait.webp" />
             <img
-              src="/ada-executive-three-quarter.webp"
-              width="500"
-              height="1100"
+              src="/ada-illustrated-full.webp"
+              width="720"
+              height="1280"
               alt="Ada，你的數位同事"
               decoding="async"
             />
@@ -77,24 +84,29 @@ export function ColleaguePresence({
           <span className="character-spark character-spark-two" aria-hidden="true" />
         </div>
         <div className="scene-floor" aria-hidden="true" />
-        <div className="character-nameplate" aria-hidden="true">
-          <strong>Ada</strong>
-          <span>Legal Ops</span>
-        </div>
       </div>
 
-      <details className="channel-area">
-        <summary>工作管道與工具</summary>
-        <div className="channel-strip" aria-label="可設定的工作管道與工具">
-          <span><MonitorCog size={14} /> Computer Use</span>
-          <span><Mail size={14} /> Gmail</span>
-          <span><Calendar size={14} /> Google Calendar</span>
-          <span><Mail size={14} /> Outlook Email</span>
-          <span><Calendar size={14} /> Outlook Calendar</span>
-          <span><span className="slack-mark" aria-hidden="true">#</span> Slack</span>
-          <span><BookOpen size={14} /> Notion</span>
-        </div>
-      </details>
+      <Collapse
+        className="channel-area"
+        ghost
+        size="small"
+        items={[{
+          key: "tools",
+          label: "工作管道與工具",
+          forceRender: true,
+          children: (
+            <div className="channel-strip" aria-label="可設定的工作管道與工具">
+              <Tag icon={<DesktopOutlined />}>Computer Use</Tag>
+              <Tag icon={<MailOutlined />}>Gmail</Tag>
+              <Tag icon={<CalendarOutlined />}>Google Calendar</Tag>
+              <Tag icon={<MailOutlined />}>Outlook Email</Tag>
+              <Tag icon={<CalendarOutlined />}>Outlook Calendar</Tag>
+              <Tag icon={<NumberOutlined />}>Slack</Tag>
+              <Tag icon={<ReadOutlined />}>Notion</Tag>
+            </div>
+          ),
+        }]}
+      />
     </aside>
   );
 }

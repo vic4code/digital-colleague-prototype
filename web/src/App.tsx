@@ -7,11 +7,13 @@ import {
   useState,
 } from "react";
 import {
-  Check,
-  Mic,
-  Send,
-  Sparkles,
-} from "lucide-react";
+  AudioOutlined,
+  CheckCircleOutlined,
+  SendOutlined,
+  TeamOutlined,
+} from "@ant-design/icons";
+import { Avatar, Button, ConfigProvider, Input, Tooltip } from "antd";
+import type { GetRef } from "antd";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 import { getHealth, postTurn } from "./api";
 import {
@@ -63,6 +65,8 @@ interface AppProps {
   voiceSupported?: boolean;
 }
 
+type TextAreaRef = GetRef<typeof Input.TextArea>;
+
 export function App({ voiceSupported = false }: AppProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
@@ -70,7 +74,7 @@ export function App({ voiceSupported = false }: AppProps) {
   const [isSending, setIsSending] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("checking");
   const messageListRef = useRef<HTMLOListElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<TextAreaRef>(null);
   const followConversationRef = useRef(true);
   const [threadId, setThreadId] = useState<string | undefined>(() => {
     try {
@@ -119,15 +123,6 @@ export function App({ voiceSupported = false }: AppProps) {
     observer.observe(list);
     return () => observer.disconnect();
   }, []);
-
-  useLayoutEffect(() => {
-    const composer = composerRef.current;
-    if (!composer) return;
-    composer.style.height = "0px";
-    const nextHeight = Math.min(Math.max(composer.scrollHeight, 40), 132);
-    composer.style.height = `${nextHeight}px`;
-    composer.style.overflowY = composer.scrollHeight > 132 ? "auto" : "hidden";
-  }, [draft]);
 
   const voice = useVoiceRecorder({
     supported: voiceSupported,
@@ -234,130 +229,183 @@ export function App({ voiceSupported = false }: AppProps) {
     : "等你交辦下一件事";
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="數位同事首頁">
-          <span className="brand-mark" aria-hidden="true"><Sparkles size={18} /></span>
-          <span className="brand-name">ADA</span>
-          <span className="brand-descriptor">DIGITAL COLLEAGUE</span>
-        </a>
-        <div className={`runtime-pill ${runtimeStatus}`}>
-          <span aria-hidden="true" />
-          {runtimeStatus === "ready"
-            ? "Ada 已就緒"
-            : runtimeStatus === "offline"
-              ? "Ada 暫時離線"
-              : "Ada 正在準備…"}
-        </div>
-      </header>
-
-      <main className="workspace">
-        <ColleaguePresence
-          runtimeStatus={runtimeStatus}
-          activity={activity}
-          currentFocus={currentFocus}
-        />
-
-        <section className={`conversation ${messages.length === 1 ? "is-welcome" : ""}`} aria-label="與 Ada 的對話">
-          <h2 className="sr-only">與 Ada 的對話</h2>
-          <header className="conversation-header" aria-hidden="true">
-            <span>CONVERSATION</span>
-            <span>01 / ADA</span>
-          </header>
-          {messages.length > 1 && <div className="date-divider"><span>今天</span></div>}
-          <ol
-            className={`message-list ${messages.length === 1 ? "is-welcome" : ""}`}
-            aria-live="polite"
-            ref={messageListRef}
-            onScroll={(event) => {
-              const list = event.currentTarget;
-              const distanceFromBottom =
-                list.scrollHeight - list.scrollTop - list.clientHeight;
-              followConversationRef.current = distanceFromBottom < 80;
-            }}
-          >
-            {messages.map((message) => (
-              <li className={`message-row ${message.role}`} key={message.id}>
-                <article className="message-bubble">
-                  <div className="message-meta">
-                    <strong>{message.role === "ada" ? "Ada" : "你"}</strong>
-                    <time>{message.time}</time>
-                  </div>
-                  {message.role === "ada" ? (
-                    <MessageContent text={message.text} />
-                  ) : (
-                    <p>{message.text}</p>
-                  )}
-                </article>
-              </li>
-            ))}
-            {messages.length === 1 && (
-              <li className="starter-actions" aria-label="常用交辦方式">
-                <span>直接交辦，或從這裡開始</span>
-                <div>
-                  {starterPrompts.map((item) => (
-                    <button
-                      type="button"
-                      key={item.number}
-                      onClick={() => {
-                        setDraft(item.prompt);
-                        requestAnimationFrame(() => composerRef.current?.focus());
-                      }}
-                    >
-                      <span>{item.number}</span>
-                      <strong>{item.label}</strong>
-                      <small>{item.detail}</small>
-                    </button>
-                  ))}
-                </div>
-              </li>
-            )}
-          </ol>
-
-          <div className="composer-wrap">
-            {notice && <div className="notice" role="status" aria-label={notice}>{notice}</div>}
-            {voice.isRecording && (
-              <div className="recording-banner" role="status">
-                <span className="recording-dot" aria-hidden="true" /> 正在錄音，說完後請按停止
-              </div>
-            )}
-            <form className={`composer ${voiceSupported ? "has-voice" : ""}`} onSubmit={(event) => void sendMessage(event)}>
-              {voiceSupported && (
-                <button
-                  className={`voice-button ${voice.isRecording ? "active" : ""}`}
-                  type="button"
-                  aria-label={recordingLabel}
-                  aria-pressed={voice.isRecording}
-                  disabled={voice.isBusy || isSending}
-                  onClick={() => void voice.toggle()}
-                >
-                  <Mic size={21} />
-                </button>
-              )}
-              <label className="sr-only" htmlFor="message-composer">傳訊息給 Ada</label>
-              <textarea
-                id="message-composer"
-                ref={composerRef}
-                value={draft}
-                rows={1}
-                placeholder={voice.state === "transcribing" ? "正在轉成文字…" : "跟 Ada 說…"}
-                aria-label="傳訊息給 Ada"
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleComposerKeyDown}
-              />
-              <button className="send-button" type="submit" aria-label="送出訊息" disabled={!canSend}>
-                <Send size={19} />
-              </button>
-            </form>
-            {voiceSupported && (
-              <p className="composer-hint">
-                <Check size={13} />
-                語音會先轉成文字，確認後再送出
-              </p>
-            )}
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: "#176b52",
+          colorInfo: "#176b52",
+          colorSuccess: "#2f7a5f",
+          colorText: "#17221e",
+          colorTextSecondary: "#607069",
+          colorBgLayout: "#f2f5f3",
+          colorBgContainer: "#ffffff",
+          colorBorder: "#dfe6e2",
+          borderRadius: 12,
+          controlHeight: 42,
+          fontFamily:
+            '"Segoe UI Variable", "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        },
+        components: {
+          Button: { primaryShadow: "none" },
+          Input: { activeShadow: "0 0 0 3px rgba(23, 107, 82, 0.12)" },
+        },
+      }}
+    >
+      <div className="app-shell">
+        <header className="topbar">
+          <a className="brand" href="/" aria-label="數位同事首頁">
+            <Avatar className="brand-mark" icon={<TeamOutlined />} />
+            <span>
+              <strong className="brand-name">Ada</strong>
+              <small className="brand-descriptor">你的數位同事</small>
+            </span>
+          </a>
+          <div className={`runtime-pill ${runtimeStatus}`} role="status">
+            <span aria-hidden="true" />
+            {runtimeStatus === "ready"
+              ? "Ada 已就緒"
+              : runtimeStatus === "offline"
+                ? "Ada 暫時離線"
+                : "Ada 正在準備…"}
           </div>
-        </section>
-      </main>
-    </div>
+        </header>
+
+        <main className="workspace">
+          <ColleaguePresence
+            runtimeStatus={runtimeStatus}
+            activity={activity}
+            currentFocus={currentFocus}
+          />
+
+          <section className="conversation" aria-label="與 Ada 的對話">
+            <header className="conversation-header">
+              <div>
+                <h2>與 Ada 對話</h2>
+                <p>把工作交給她，進度與結果都會留在這裡。</p>
+              </div>
+              <span className="conversation-context">今天</span>
+            </header>
+
+            <ol
+              className={`message-list ${messages.length === 1 ? "is-welcome" : ""}`}
+              aria-live="polite"
+              ref={messageListRef}
+              onScroll={(event) => {
+                const list = event.currentTarget;
+                const distanceFromBottom =
+                  list.scrollHeight - list.scrollTop - list.clientHeight;
+                followConversationRef.current = distanceFromBottom < 80;
+              }}
+            >
+              {messages.map((message) => (
+                <li className={`message-row ${message.role}`} key={message.id}>
+                  {message.role === "ada" && (
+                    <Avatar className="message-avatar" src="/ada-illustrated-avatar.webp">A</Avatar>
+                  )}
+                  <article className="message-bubble">
+                    <div className="message-meta">
+                      <strong>{message.role === "ada" ? "Ada" : "你"}</strong>
+                      <time>{message.time}</time>
+                    </div>
+                    {message.role === "ada" ? (
+                      <MessageContent text={message.text} />
+                    ) : (
+                      <p>{message.text}</p>
+                    )}
+                  </article>
+                </li>
+              ))}
+              {messages.length === 1 && (
+                <li className="starter-actions" aria-label="常用交辦方式">
+                  <div className="starter-heading">
+                    <span>建議你先從這裡開始</span>
+                    <small>也可以直接在下方輸入任何工作</small>
+                  </div>
+                  <div className="starter-grid">
+                    {starterPrompts.map((item) => (
+                      <Button
+                        type="text"
+                        className="starter-card"
+                        key={item.number}
+                        onClick={() => {
+                          setDraft(item.prompt);
+                          requestAnimationFrame(() => composerRef.current?.focus());
+                        }}
+                      >
+                        <span className="starter-number">{item.number}</span>
+                        <span className="starter-copy">
+                          <strong>{item.label}</strong>
+                          <small>{item.detail}</small>
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                </li>
+              )}
+            </ol>
+
+            <div className="composer-wrap">
+              {notice && <div className="notice" role="status" aria-label={notice}>{notice}</div>}
+              {voice.isRecording && (
+                <div className="recording-banner" role="status">
+                  <span className="recording-dot" aria-hidden="true" /> 正在錄音，說完後請按停止
+                </div>
+              )}
+              <form className={`composer ${voiceSupported ? "has-voice" : ""}`} onSubmit={(event) => void sendMessage(event)}>
+                {voiceSupported && (
+                  <Tooltip title={recordingLabel}>
+                    <Button
+                      className={`voice-button ${voice.isRecording ? "active" : ""}`}
+                      type="text"
+                      shape="circle"
+                      icon={<AudioOutlined />}
+                      aria-label={recordingLabel}
+                      aria-pressed={voice.isRecording}
+                      disabled={voice.isBusy || isSending}
+                      onClick={() => void voice.toggle()}
+                    />
+                  </Tooltip>
+                )}
+                <label className="sr-only" htmlFor="message-composer">傳訊息給 Ada</label>
+                <Input.TextArea
+                  id="message-composer"
+                  ref={composerRef}
+                  value={draft}
+                  autoSize={{ minRows: 1, maxRows: 5 }}
+                  style={{
+                    boxSizing: "border-box",
+                    borderWidth: 0,
+                    fontSize: 15,
+                    lineHeight: 1.5,
+                    paddingTop: 9,
+                    paddingBottom: 7,
+                  }}
+                  variant="borderless"
+                  placeholder={voice.state === "transcribing" ? "正在轉成文字…" : "交辦一件工作給 Ada"}
+                  aria-label="傳訊息給 Ada"
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={handleComposerKeyDown}
+                />
+                <Tooltip title="送出訊息">
+                  <Button
+                    className="send-button"
+                    type="primary"
+                    shape="circle"
+                    htmlType="submit"
+                    icon={<SendOutlined />}
+                    aria-label="送出訊息"
+                    disabled={!canSend}
+                  />
+                </Tooltip>
+              </form>
+              <p className="composer-hint">
+                {voiceSupported && <><CheckCircleOutlined /> 語音會先轉成文字，確認後再送出</>}
+                {!voiceSupported && "Enter 送出，Shift + Enter 換行"}
+              </p>
+            </div>
+          </section>
+        </main>
+      </div>
+    </ConfigProvider>
   );
 }
