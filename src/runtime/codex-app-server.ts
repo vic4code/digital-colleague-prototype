@@ -18,6 +18,15 @@ import { buildSystemPrompt, buildTurnPrompt } from "./prompt.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const WORKSPACE_SNAPSHOT_TTL_MS = 5 * 60_000;
+const REASONING_EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+] as const;
+type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 type ErrorCode =
   | "CLOSED"
@@ -60,6 +69,7 @@ export interface AppServerProcess {
 export interface CodexAppServerRuntimeOptions {
   bin?: string;
   model?: string;
+  reasoningEffort?: ReasoningEffort;
   timeoutMs?: number;
   startProcess?: () => AppServerProcess;
 }
@@ -767,6 +777,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
   readonly name = "codex-app-server";
   private readonly client: CodexAppServerClient;
   private readonly model?: string;
+  private readonly reasoningEffort: ReasoningEffort;
   private readonly nativeThreads = new Map<string, string>();
   private readonly queues = new Map<string, Promise<void>>();
   private closed = false;
@@ -774,6 +785,16 @@ export class CodexAppServerRuntime implements AgentRuntime {
   constructor(options: CodexAppServerRuntimeOptions = {}) {
     this.client = new CodexAppServerClient(options);
     this.model = options.model ?? (process.env.CODEX_MODEL?.trim() || undefined);
+    const configuredEffort =
+      options.reasoningEffort ??
+      process.env.CODEX_REASONING_EFFORT?.trim().toLowerCase() ??
+      "low";
+    if (!REASONING_EFFORTS.includes(configuredEffort as ReasoningEffort)) {
+      throw new Error(
+        `CODEX_REASONING_EFFORT must be one of: ${REASONING_EFFORTS.join(", ")}`,
+      );
+    }
+    this.reasoningEffort = configuredEffort as ReasoningEffort;
   }
 
   async respond(
@@ -827,6 +848,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           cwd: colleague.dir,
           approvalPolicy: "never",
           sandbox: "read-only",
+          effort: this.reasoningEffort,
           developerInstructions: buildSystemPrompt(colleague),
           ephemeral: true,
           threadSource: "digital-colleague-prototype",
@@ -881,6 +903,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
         ],
         approvalPolicy: "never",
         sandboxPolicy: { type: "readOnly", networkAccess: false },
+        effort: this.reasoningEffort,
       };
       if (this.model) params.model = this.model;
       const startedTurn = await this.client.request<TurnStartResult>(

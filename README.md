@@ -159,7 +159,9 @@ npm ci
 
 No `.env` file is required for the default local web experience. The API uses
 `codex` from `PATH`; copy `.env.example` to `.env` only when you need to change
-`CODEX_BIN`, `CODEX_MODEL`, or the runtime.
+`CODEX_BIN`, `CODEX_MODEL`, `CODEX_REASONING_EFFORT`, or the runtime. The web
+chat defaults to `low` effort for responsiveness; use `medium` or higher when
+deeper reasoning matters more than latency.
 
 ### Start Ada's API
 

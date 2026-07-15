@@ -243,6 +243,15 @@ describe("CodexAppServerRuntime", () => {
     await runtime.close?.();
   });
 
+  it("rejects an unsupported reasoning effort before starting Codex", () => {
+    expect(
+      () =>
+        new CodexAppServerRuntime({
+          reasoningEffort: "fast" as never,
+        }),
+    ).toThrow("CODEX_REASONING_EFFORT must be one of");
+  });
+
   it("uses the native initialize, thread/start and turn/start protocol", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
     let turnNumber = 0;
@@ -323,6 +332,7 @@ describe("CodexAppServerRuntime", () => {
       cwd: colleague.dir,
       approvalPolicy: "never",
       sandbox: "read-only",
+      effort: "low",
       ephemeral: true,
     });
     expect(starts[0]?.params?.developerInstructions).toContain("You are Ada");
@@ -372,6 +382,7 @@ describe("CodexAppServerRuntime", () => {
       threadId: "native-thread",
       approvalPolicy: "never",
       sandboxPolicy: { type: "readOnly", networkAccess: false },
+      effort: "low",
     });
     expect(JSON.stringify(turns[0]?.params)).toContain("My name is Chris.");
     expect(JSON.stringify(turns[1]?.params)).not.toContain("My name is Chris.");
