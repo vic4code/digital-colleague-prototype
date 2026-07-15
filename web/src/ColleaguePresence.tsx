@@ -7,7 +7,12 @@ import {
 } from "@ant-design/icons";
 import { Collapse, Tag } from "antd";
 
-export type RuntimeStatus = "checking" | "ready" | "offline";
+export type RuntimeStatus =
+  | "checking"
+  | "ready"
+  | "busy"
+  | "reconnecting"
+  | "offline";
 export type ActivityKind = "available" | "thinking" | "listening" | "attention";
 
 export interface ColleagueActivity {
@@ -30,6 +35,10 @@ export function ColleaguePresence({
   const presenceLabel =
     runtimeStatus === "ready"
       ? "在線 · 可以開始"
+      : runtimeStatus === "busy"
+        ? "在線 · 正在處理其他工作"
+        : runtimeStatus === "reconnecting"
+          ? "在線 · 通知重新連線中"
       : runtimeStatus === "offline"
         ? "離線 · 可重新連線"
         : "正在連線…";

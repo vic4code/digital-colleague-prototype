@@ -3,6 +3,28 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  readonly listeners = new Map<string, Set<(event: MessageEvent) => void>>();
+  onerror: ((event: Event) => void) | null = null;
+  readonly close = vi.fn();
+
+  constructor(readonly url: string) {
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    const listeners = this.listeners.get(type) ?? new Set();
+    listeners.add(listener as (event: MessageEvent) => void);
+    this.listeners.set(type, listeners);
+  }
+
+  emit(type: string, data: unknown): void {
+    const event = new MessageEvent(type, { data: JSON.stringify(data) });
+    for (const listener of this.listeners.get(type) ?? []) listener(event);
+  }
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -12,6 +34,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("digital colleague chat", () => {
   beforeEach(() => {
+    FakeEventSource.instances = [];
+    vi.stubGlobal("EventSource", FakeEventSource);
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -23,6 +47,9 @@ describe("digital colleague chat", () => {
               colleague: { id: "ada", name: "Ada" },
             },
           });
+        }
+        if (String(input).endsWith("/api/v1/events")) {
+          return jsonResponse({ data: [] });
         }
         const request = JSON.parse(String(init?.body)) as { text: string };
         return jsonResponse({
@@ -99,6 +126,9 @@ describe("digital colleague chat", () => {
           },
         });
       }
+      if (String(input).endsWith("/api/v1/events")) {
+        return jsonResponse({ data: [] });
+      }
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           streamController = controller;
@@ -149,6 +179,9 @@ describe("digital colleague chat", () => {
           },
         });
       }
+      if (String(input).endsWith("/api/v1/events")) {
+        return jsonResponse({ data: [] });
+      }
       return jsonResponse({
         data: {
           threadId: "web:0f289a92-7255-49f8-8332-e9f530d8f63c",
@@ -191,6 +224,9 @@ describe("digital colleague chat", () => {
           },
         });
       }
+      if (String(input).endsWith("/api/v1/events")) {
+        return jsonResponse({ data: [] });
+      }
       return pending;
     });
     const user = userEvent.setup();
@@ -224,6 +260,9 @@ describe("digital colleague chat", () => {
           },
         });
       }
+      if (String(input).endsWith("/api/v1/events")) {
+        return jsonResponse({ data: [] });
+      }
       return jsonResponse(
         { error: { code: "RUNTIME_UNAVAILABLE", message: "Ada could not answer." } },
         502,
@@ -241,6 +280,86 @@ describe("digital colleague chat", () => {
         name: "Ada could not answer. 訊息仍保留在這裡，請再試一次。",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("shows a proactive event without waiting for a user message", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const source = FakeEventSource.instances[0];
+
+    source.emit("ready", { connected: true });
+    source.emit("notification", {
+      eventId: "gmail-event-1",
+      source: "gmail",
+      type: "message.created",
+      title: "新信件需要你確認",
+      summary: "客戶詢問合約版本",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+    });
+
+    expect(await screen.findByText("新信件需要你確認")).toBeInTheDocument();
+    const bell = screen.getByRole("button", { name: "通知，1 則未讀" });
+    await user.click(bell);
+    expect(screen.getAllByText("客戶詢問合約版本")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "交給 Ada" }));
+    expect(
+      (screen.getByLabelText("傳訊息給 Ada") as HTMLTextAreaElement).value,
+    ).toContain("新信件需要你確認");
+  });
+
+  it("does not show a duplicate proactive event twice", async () => {
+    render(<App />);
+    const source = FakeEventSource.instances[0];
+    const event = {
+      eventId: "gmail-event-1",
+      source: "gmail",
+      type: "message.created",
+      title: "同一封信",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+    };
+
+    source.emit("notification", event);
+    source.emit("notification", event);
+
+    expect(
+      await screen.findByRole("button", { name: "通知，1 則未讀" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reports runtime busy without marking Ada offline", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith("/api/v1/health")) {
+        return jsonResponse({
+          data: {
+            status: "ok",
+            runtime: "codex-app-server",
+            colleague: { id: "ada", name: "Ada" },
+          },
+        });
+      }
+      if (String(input).endsWith("/api/v1/events")) {
+        return jsonResponse({ data: [] });
+      }
+      return jsonResponse(
+        {
+          error: {
+            code: "RUNTIME_BUSY",
+            message: "Ada is finishing another message. Try again shortly.",
+          },
+        },
+        429,
+      );
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText("傳訊息給 Ada"), "第二個工作");
+    await user.click(screen.getByRole("button", { name: "送出訊息" }));
+
+    expect(await screen.findByText("Ada 正在完成上一件事")).toBeInTheDocument();
+    expect(screen.getByText("Ada 正忙，但連線正常")).toBeInTheDocument();
+    expect(screen.queryByText("Ada 暫時離線")).not.toBeInTheDocument();
   });
 
   it("does not send an empty message", async () => {

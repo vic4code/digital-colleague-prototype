@@ -84,6 +84,18 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 13px;
 }
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.notification-button.ant-btn {
+  color: var(--muted);
+}
+.notification-button.ant-btn:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
 .runtime-pill > span,
 .presence > span,
 .activity-light,
@@ -103,6 +115,71 @@ textarea:focus-visible {
 .presence.offline { color: var(--danger); }
 .runtime-pill.offline > span,
 .presence.offline > span { background: var(--danger); }
+.runtime-pill.busy,
+.runtime-pill.reconnecting,
+.presence.busy,
+.presence.reconnecting { color: var(--warning); }
+.runtime-pill.busy > span,
+.runtime-pill.reconnecting > span,
+.presence.busy > span,
+.presence.reconnecting > span { background: var(--warning); }
+
+.notification-inbox {
+  width: min(340px, calc(100vw - 40px));
+}
+.notification-inbox-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.notification-inbox-heading strong { color: var(--text); font-size: 14px; }
+.notification-inbox-heading span { color: var(--muted); font-size: 11px; }
+.notification-empty {
+  margin: 20px 4px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+.notification-list {
+  display: grid;
+  max-height: min(480px, 60vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.notification-item {
+  padding: 13px 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.notification-item:last-child { border-bottom: 0; }
+.notification-item > strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+.notification-item > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.notification-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+}
+.notification-item .ant-btn-link {
+  height: auto;
+  margin-top: 5px;
+  padding: 0;
+  font-size: 12px;
+}
 
 .workspace {
   display: grid;

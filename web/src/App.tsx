@@ -8,13 +8,30 @@ import {
 } from "react";
 import {
   AudioOutlined,
+  BellOutlined,
   CheckCircleOutlined,
   SendOutlined,
 } from "@ant-design/icons";
-import { Avatar, Button, ConfigProvider, Input, Tooltip } from "antd";
+import {
+  Avatar,
+  Badge,
+  Button,
+  ConfigProvider,
+  Input,
+  Popover,
+  Tooltip,
+  notification,
+} from "antd";
 import type { GetRef } from "antd";
 import { useVoiceRecorder } from "./useVoiceRecorder";
-import { getHealth, postTurn } from "./api";
+import {
+  ApiError,
+  getHealth,
+  getProactiveEvents,
+  postTurn,
+  subscribeToProactiveEvents,
+  type ProactiveEvent,
+} from "./api";
 import {
   ColleaguePresence,
   type ColleagueActivity,
@@ -66,12 +83,37 @@ interface AppProps {
 
 type TextAreaRef = GetRef<typeof Input.TextArea>;
 
+const eventSourceLabels: Record<ProactiveEvent["source"], string> = {
+  gmail: "Gmail",
+  outlook: "Outlook",
+  calendar: "行事曆",
+  slack: "Slack",
+  notion: "Notion",
+  system: "系統",
+};
+
+function sourceLabel(source: ProactiveEvent["source"]): string {
+  return eventSourceLabels[source];
+}
+
+function formatEventTime(value: string): string {
+  return new Intl.DateTimeFormat("zh-TW", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export function App({ voiceSupported = false }: AppProps) {
+  const [notificationApi, notificationContextHolder] = notification.useNotification();
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("checking");
+  const [proactiveEvents, setProactiveEvents] = useState<ProactiveEvent[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [latestAnnouncement, setLatestAnnouncement] = useState("");
+  const seenEventIdsRef = useRef(new Set<string>());
   const messageListRef = useRef<HTMLOListElement>(null);
   const composerRef = useRef<TextAreaRef>(null);
   const followConversationRef = useRef(true);
@@ -97,6 +139,51 @@ export function App({ voiceSupported = false }: AppProps) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const acceptEvent = (event: ProactiveEvent, announce: boolean) => {
+      if (!active || seenEventIdsRef.current.has(event.eventId)) return;
+      seenEventIdsRef.current.add(event.eventId);
+      setProactiveEvents((current) => [event, ...current].slice(0, 100));
+      if (!announce) return;
+      setUnreadCount((current) => current + 1);
+      setLatestAnnouncement(`${event.title}${event.summary ? `：${event.summary}` : ""}`);
+      notificationApi.open({
+        title: event.title,
+        description: event.summary ?? sourceLabel(event.source),
+        placement: "topRight",
+        duration: 6,
+      });
+    };
+
+    const unsubscribe = subscribeToProactiveEvents({
+      onReady: () => {
+        setRuntimeStatus((current) =>
+          current === "checking" || current === "reconnecting" ? "ready" : current,
+        );
+      },
+      onEvent: (event) => acceptEvent(event, true),
+      onError: () => {
+        setRuntimeStatus((current) =>
+          current === "ready" || current === "checking" ? "reconnecting" : current,
+        );
+      },
+    });
+
+    void getProactiveEvents().then(
+      (events) => events.slice().reverse().forEach((event) => acceptEvent(event, false)),
+      () => {
+        // EventSource reconnects independently; a failed replay must not break chat.
+      },
+    );
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [notificationApi]);
 
   useLayoutEffect(() => {
     const list = messageListRef.current;
@@ -193,6 +280,11 @@ export function App({ voiceSupported = false }: AppProps) {
       setNotice("");
       setRuntimeStatus("ready");
     } catch (error) {
+      if (error instanceof ApiError && error.code === "RUNTIME_BUSY") {
+        setNotice("Ada 正在完成上一件事");
+        setRuntimeStatus("busy");
+        return;
+      }
       const message = error instanceof Error ? error.message : "Ada 暫時無法回覆。";
       setNotice(`${message} 訊息仍保留在這裡，請再試一次。`);
       setRuntimeStatus("offline");
@@ -232,6 +324,18 @@ export function App({ voiceSupported = false }: AppProps) {
       kind: "thinking",
       label: "正在處理你的需求",
       detail: "我正在處理，完成後會直接在這個對話回覆。",
+    };
+  } else if (runtimeStatus === "busy") {
+    activity = {
+      kind: "thinking",
+      label: "Ada 正忙，但連線正常",
+      detail: "上一件工作還在處理，稍後再送出即可。",
+    };
+  } else if (runtimeStatus === "reconnecting") {
+    activity = {
+      kind: "attention",
+      label: "正在重新連接通知",
+      detail: "對話仍可使用，主動通知會自動恢復連線。",
     };
   } else if (runtimeStatus === "offline") {
     activity = {
@@ -281,6 +385,8 @@ export function App({ voiceSupported = false }: AppProps) {
         },
       }}
     >
+      {notificationContextHolder}
+      <div className="sr-only" aria-live="polite">{latestAnnouncement}</div>
       <div className="app-shell">
         <header className="topbar">
           <a className="brand" href="/" aria-label="數位同事首頁">
@@ -294,13 +400,72 @@ export function App({ voiceSupported = false }: AppProps) {
               <small className="brand-descriptor">你的數位同事</small>
             </span>
           </a>
-          <div className={`runtime-pill ${runtimeStatus}`} role="status">
-            <span aria-hidden="true" />
-            {runtimeStatus === "ready"
-              ? "Ada 已就緒"
-              : runtimeStatus === "offline"
-                ? "Ada 暫時離線"
-                : "Ada 正在準備…"}
+          <div className="topbar-actions">
+            <Popover
+              trigger="click"
+              placement="bottomRight"
+              onOpenChange={(open) => {
+                if (open) setUnreadCount(0);
+              }}
+              content={
+                <div className="notification-inbox">
+                  <div className="notification-inbox-heading">
+                    <strong>主動通知</strong>
+                    <span>{proactiveEvents.length} 則</span>
+                  </div>
+                  {proactiveEvents.length === 0 ? (
+                    <p className="notification-empty">目前沒有新通知</p>
+                  ) : (
+                    <ol className="notification-list">
+                      {proactiveEvents.map((event) => (
+                        <li className="notification-item" key={event.eventId}>
+                          <div className="notification-meta">
+                            <span>{sourceLabel(event.source)}</span>
+                            <time dateTime={event.occurredAt}>{formatEventTime(event.occurredAt)}</time>
+                          </div>
+                          <strong>{event.title}</strong>
+                          {event.summary && <p>{event.summary}</p>}
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                              setDraft(
+                                `請處理這則${sourceLabel(event.source)}通知：${event.title}${event.summary ? `（${event.summary}）` : ""}`,
+                              );
+                              requestAnimationFrame(() => composerRef.current?.focus());
+                            }}
+                          >
+                            交給 Ada
+                          </Button>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              }
+            >
+              <Badge count={unreadCount} size="small">
+                <Button
+                  className="notification-button"
+                  type="text"
+                  shape="circle"
+                  icon={<BellOutlined />}
+                  aria-label={unreadCount > 0 ? `通知，${unreadCount} 則未讀` : "通知"}
+                />
+              </Badge>
+            </Popover>
+            <div className={`runtime-pill ${runtimeStatus}`} role="status">
+              <span aria-hidden="true" />
+              {runtimeStatus === "ready"
+                ? "Ada 已就緒"
+                : runtimeStatus === "busy"
+                  ? "Ada 正忙"
+                  : runtimeStatus === "reconnecting"
+                    ? "通知重新連線中"
+                    : runtimeStatus === "offline"
+                      ? "Ada 暫時離線"
+                      : "Ada 正在準備…"}
+            </div>
           </div>
         </header>
 

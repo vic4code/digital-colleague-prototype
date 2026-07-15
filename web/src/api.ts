@@ -17,6 +17,27 @@ interface ErrorEnvelope {
   error?: { code?: string; message?: string };
 }
 
+export class ApiError extends Error {
+  readonly name = "ApiError";
+
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+export interface ProactiveEvent {
+  eventId: string;
+  source: "gmail" | "outlook" | "calendar" | "slack" | "notion" | "system";
+  type: string;
+  title: string;
+  summary?: string;
+  occurredAt: string;
+}
+
 type TurnStreamEvent =
   | { type: "start"; threadId: string }
   | { type: "delta"; delta: string }
@@ -33,9 +54,39 @@ async function readPayload<T>(response: Response): Promise<T> {
   }
   if (!response.ok || !payload || !("data" in payload)) {
     const message = payload && "error" in payload ? payload.error?.message : undefined;
-    throw new Error(message || "Ada's local runtime is unavailable.");
+    const code = payload && "error" in payload ? payload.error?.code : undefined;
+    throw new ApiError(
+      message || "Ada's local runtime is unavailable.",
+      code,
+      response.status,
+    );
   }
   return payload.data;
+}
+
+export async function getProactiveEvents(): Promise<ProactiveEvent[]> {
+  const response = await fetch("/api/v1/events", {
+    headers: { accept: "application/json" },
+  });
+  return readPayload<ProactiveEvent[]>(response);
+}
+
+export function subscribeToProactiveEvents(handlers: {
+  onReady(): void;
+  onEvent(event: ProactiveEvent): void;
+  onError(): void;
+}): () => void {
+  const source = new EventSource("/api/v1/events/stream");
+  source.addEventListener("ready", handlers.onReady);
+  source.addEventListener("notification", (message) => {
+    try {
+      handlers.onEvent(JSON.parse((message as MessageEvent<string>).data));
+    } catch {
+      handlers.onError();
+    }
+  });
+  source.onerror = handlers.onError;
+  return () => source.close();
 }
 
 export async function getHealth(): Promise<HealthData> {
