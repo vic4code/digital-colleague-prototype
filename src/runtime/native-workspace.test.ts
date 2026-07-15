@@ -22,6 +22,17 @@ const pluginInventory = {
 const m365PluginInventory = {
   marketplaces: [
     {
+      name: "digital-colleague-prototype",
+      path: "/tmp/digital-colleague/.agents/plugins/marketplace.json",
+      plugins: [
+        {
+          name: "digital-colleague-m365",
+          installed: true,
+          enabled: true,
+        },
+      ],
+    },
+    {
       name: "openai-curated",
       path: "/tmp/openai-curated/.agents/plugins/marketplace.json",
       plugins: [
@@ -84,7 +95,8 @@ describe("native workspace connector selection", () => {
     const text = "幫我做 Microsoft 365 今日工作摘要";
 
     expect(nativeConnectorIntentKey(text)).toBe(
-      "outlook-email:outlook-email-inbox-triage," +
+      "digital-colleague-m365:m365-daily-brief," +
+        "outlook-email:outlook-email-inbox-triage," +
         "outlook-calendar:outlook-calendar-daily-brief," +
         "teams:teams-daily-digest,sharepoint",
     );
@@ -93,6 +105,7 @@ describe("native workspace connector selection", () => {
         (selection) => selection.pluginName,
       ),
     ).toEqual([
+      "digital-colleague-m365",
       "outlook-email",
       "outlook-calendar",
       "teams",
@@ -102,7 +115,7 @@ describe("native workspace connector selection", () => {
 
   it("routes OneDrive through SharePoint and Planner through Teams", () => {
     expect(nativeConnectorIntentKey("找 OneDrive 最近的專案文件")).toBe(
-      "sharepoint",
+      "digital-colleague-m365:m365-document-workspace,sharepoint",
     );
     expect(nativeConnectorIntentKey("整理 Teams Planner 的待辦")).toBe(
       "teams:teams-planner-task-management",
@@ -115,6 +128,19 @@ describe("native workspace connector selection", () => {
       "整理 Teams 今日訊息和 SharePoint 文件",
     );
     const details = {
+      "digital-colleague-m365": {
+        plugin: {
+          apps: [],
+          skills: [
+            {
+              name: "digital-colleague-m365:m365-daily-brief",
+              path:
+                "/tmp/plugins/digital-colleague-m365/skills/m365-daily-brief/SKILL.md",
+              enabled: true,
+            },
+          ],
+        },
+      },
       teams: {
         plugin: {
           apps: [{ id: "connector_teams", name: "Teams" }],
@@ -166,6 +192,8 @@ describe("native workspace connector selection", () => {
       "connector_sharepoint",
     ]);
     expect(snapshot.invocationTokens).toEqual([
+      "@digital-colleague-m365",
+      "$m365-daily-brief",
       "@teams",
       "$teams",
       "$teams-daily-digest",

@@ -27,6 +27,7 @@ export interface NativeConnectorSelection {
   pluginName: string;
   installed?: boolean;
   enabled?: boolean;
+  requiresApp: boolean;
   preferredSkillSuffixes: string[];
 }
 
@@ -42,8 +43,9 @@ export interface NativeAppInventory {
 
 interface ConnectorSpec {
   label: string;
-  marketplaceName: "openai-curated";
+  marketplaceName: "openai-curated" | "digital-colleague-prototype";
   pluginName: string;
+  requiresApp: boolean;
 }
 
 const CONNECTORS: readonly ConnectorSpec[] = [
@@ -51,43 +53,58 @@ const CONNECTORS: readonly ConnectorSpec[] = [
     label: "Gmail",
     marketplaceName: "openai-curated",
     pluginName: "gmail",
+    requiresApp: true,
   },
   {
     label: "Google Calendar",
     marketplaceName: "openai-curated",
     pluginName: "google-calendar",
+    requiresApp: true,
   },
   {
     label: "Outlook Email",
     marketplaceName: "openai-curated",
     pluginName: "outlook-email",
+    requiresApp: true,
   },
   {
     label: "Outlook Calendar",
     marketplaceName: "openai-curated",
     pluginName: "outlook-calendar",
+    requiresApp: true,
   },
   {
     label: "Teams",
     marketplaceName: "openai-curated",
     pluginName: "teams",
+    requiresApp: true,
   },
   {
     label: "SharePoint",
     marketplaceName: "openai-curated",
     pluginName: "sharepoint",
+    requiresApp: true,
   },
   {
     label: "Slack",
     marketplaceName: "openai-curated",
     pluginName: "slack",
+    requiresApp: true,
   },
   {
     label: "Notion",
     marketplaceName: "openai-curated",
     pluginName: "notion",
+    requiresApp: true,
   },
 ];
+
+const M365_WORKFLOW: ConnectorSpec = {
+  label: "Microsoft 365 workflow",
+  marketplaceName: "digital-colleague-prototype",
+  pluginName: "digital-colleague-m365",
+  requiresApp: false,
+};
 
 interface InstalledPlugin {
   marketplaceName: string;
@@ -202,6 +219,41 @@ function requestedSpecs(text: string): ConnectorSpec[] {
   return CONNECTORS.filter((connector) => selected.has(connector.pluginName));
 }
 
+function m365WorkflowSkill(text: string): string | undefined {
+  const microsoftSuite =
+    /\b(?:microsoft|office)\s*365\b|\bm365\b|微軟\s*365/i.test(text);
+  const document =
+    /\bsharepoint\b|\bone\s*drive\b|\bonedrive\b|SharePoint|OneDrive/i.test(
+      text,
+    );
+  const teams = /\b(?:microsoft\s+)?teams\b|\bplanner\b/i.test(text);
+  const daily =
+    /今天|今日|明天|明日|摘要|重點|優先|\bdaily\b|\bbrief\b|\bdigest\b/i.test(
+      text,
+    );
+  const setup =
+    /設定|設置|安裝|連接|連線|授權|權限|驗證|檢查|稽核|\bsetup\b|\bconnect\b|\baudit\b/i.test(
+      text,
+    );
+  const meeting =
+    /會議|meeting/i.test(text) &&
+    /準備|會前|會後|追蹤|跟進|follow.?up|prep/i.test(text);
+
+  if (microsoftSuite && setup) return "m365-workspace-setup";
+  if (meeting) return "m365-meeting-followup";
+  if ((microsoftSuite || (teams && document)) && daily) {
+    return "m365-daily-brief";
+  }
+  if (document) return "m365-document-workspace";
+  if (microsoftSuite) return "m365-workspace-setup";
+  return undefined;
+}
+
+function requestedWorkspaceSpecs(text: string): ConnectorSpec[] {
+  const workflow = m365WorkflowSkill(text);
+  return workflow ? [M365_WORKFLOW, ...requestedSpecs(text)] : requestedSpecs(text);
+}
+
 function preferredSkillSuffixes(pluginName: string, text: string): string[] {
   if (pluginName === "gmail") {
     const triage =
@@ -241,9 +293,11 @@ function preferredSkillSuffixes(pluginName: string, text: string): string[] {
 }
 
 export function nativeConnectorIntentKey(text: string): string {
-  return requestedSpecs(text)
+  return requestedWorkspaceSpecs(text)
     .map((connector) => {
-      const preferred = preferredSkillSuffixes(connector.pluginName, text)[0];
+      const preferred = connector.requiresApp
+        ? preferredSkillSuffixes(connector.pluginName, text)[0]
+        : m365WorkflowSkill(text);
       return preferred && preferred !== connector.pluginName
         ? `${connector.pluginName}:${preferred}`
         : connector.pluginName;
@@ -256,7 +310,7 @@ export function selectNativeConnectors(
   text: string,
 ): NativeConnectorSelection[] {
   const installed = installedPlugins(pluginInventory);
-  return requestedSpecs(text).map((connector) => {
+  return requestedWorkspaceSpecs(text).map((connector) => {
     const plugin = installed?.find(
       (candidate) =>
         candidate.marketplaceName === connector.marketplaceName &&
@@ -269,8 +323,11 @@ export function selectNativeConnectors(
       pluginName: connector.pluginName,
       installed: installed ? (plugin?.installed ?? false) : undefined,
       enabled: installed ? (plugin?.enabled ?? false) : undefined,
+      requiresApp: connector.requiresApp,
       preferredSkillSuffixes: preferredSkillSuffixes(
-        connector.pluginName,
+        connector.requiresApp
+          ? connector.pluginName
+          : (m365WorkflowSkill(text) ?? connector.pluginName),
         text,
       ),
     };
@@ -446,6 +503,25 @@ export function buildNativeWorkspaceSnapshot(
     });
 
     const detail = parsePluginDetail(resolution.detail);
+    const skill = detail
+      ? selectSkill(detail, selection.preferredSkillSuffixes)
+      : undefined;
+    if (!selection.requiresApp) {
+      if (skill) {
+        addToken(`$${skillSuffix(skill.name)}`);
+        addInput({
+          type: "skill",
+          name: skill.name,
+          path: skill.path,
+        });
+      }
+      lines.push(
+        skill
+          ? `- ${selection.label}：已選用 ${skillSuffix(skill.name)}。`
+          : `- ${selection.label}：plugin 已啟用，但找不到相符的 workflow skill。`,
+      );
+      continue;
+    }
     const app = detail?.apps.find(
       (candidate) => slug(candidate.name) === slug(selection.label),
     );
@@ -462,7 +538,6 @@ export function buildNativeWorkspaceSnapshot(
       name: selection.label,
       path: `app://${app.id}`,
     });
-    const skill = selectSkill(detail, selection.preferredSkillSuffixes);
     if (skill) {
       addToken(`$${skillSuffix(skill.name)}`);
       addInput({
@@ -471,7 +546,6 @@ export function buildNativeWorkspaceSnapshot(
         path: skill.path,
       });
     }
-
     const appInfo = apps.find((candidate) => candidate.id === app.id);
     if (!appInfo) {
       lines.push(
