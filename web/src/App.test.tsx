@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -100,11 +100,58 @@ describe("digital colleague chat", () => {
   it("shows Google and Microsoft workspace providers as configurable", () => {
     render(<App />);
 
-    expect(screen.getByText("Gmail")).toBeInTheDocument();
+    expect(screen.getAllByText("Gmail")).not.toHaveLength(0);
     expect(screen.getByText("Google Calendar")).toBeInTheDocument();
     expect(screen.getByText("Outlook Email")).toBeInTheDocument();
     expect(screen.getByText("Outlook Calendar")).toBeInTheDocument();
-    expect(screen.getByText("Notion")).toBeInTheDocument();
+    expect(screen.getAllByText("Notion")).not.toHaveLength(0);
+  });
+
+  it("offers persistent icon buttons that send bounded connector tests in one click", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const expectedTests = [
+      { name: "Gmail", scope: "最新 3 封郵件" },
+      { name: "Notion", scope: "小範圍知識搜尋" },
+      { name: "Outlook", scope: "最新 3 封郵件" },
+      { name: "Teams", scope: "小範圍訊息搜尋" },
+    ];
+
+    for (const test of expectedTests) {
+      const button = screen.getByRole("button", { name: `測試 ${test.name}` });
+      expect(button).toHaveTextContent(test.scope);
+      expect(button.querySelector(".connector-test-icon")).not.toBeNull();
+    }
+
+    const composer = screen.getByLabelText("傳訊息給 Ada");
+    await user.type(composer, "尚未送出的草稿");
+
+    for (const [index, test] of expectedTests.entries()) {
+      await user.click(screen.getByRole("button", { name: `測試 ${test.name}` }));
+      await waitFor(() => {
+        const turnCalls = vi.mocked(fetch).mock.calls.filter(([input]) =>
+          String(input).endsWith("/api/v1/turns"),
+        );
+        expect(turnCalls).toHaveLength(index + 1);
+      });
+    }
+
+    const prompts = vi.mocked(fetch).mock.calls
+      .filter(([input]) => String(input).endsWith("/api/v1/turns"))
+      .map(([, init]) => (JSON.parse(String(init?.body)) as { text: string }).text);
+    expect(prompts).toHaveLength(4);
+    expect(prompts[0]).toContain("官方 Gmail connector");
+    expect(prompts[1]).toContain("官方 Notion connector");
+    expect(prompts[2]).toContain("官方 Outlook Email connector");
+    expect(prompts[3]).toContain("官方 Microsoft Teams connector");
+    for (const prompt of prompts) {
+      expect(prompt).toContain("唯讀");
+      expect(prompt).toContain("不要顯示");
+      expect(prompt).toContain("只回覆");
+    }
+    expect(composer).toHaveValue("尚未送出的草稿");
+    expect(screen.getByRole("button", { name: "測試 Gmail" })).toBeInTheDocument();
   });
 
   it("submits a text message, clears the composer, and renders Ada's reply", async () => {
@@ -451,7 +498,10 @@ describe("digital colleague chat", () => {
       await screen.findByText(/這是 Ada 使用的 Codex runtime 帳號/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Gmail 等服務會在各自的官方 OAuth 頁面選擇另一個帳號/),
+      screen.getByText(/若官方連接頁先要求登入 ChatGPT，請先登入上方這個 Codex 帳號/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/進入 OAuth 後，再選擇 Gmail、Notion 等服務帳號；服務帳號可以不同/),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "使用此 Codex 帳號" }),

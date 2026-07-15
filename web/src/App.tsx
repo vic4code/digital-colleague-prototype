@@ -43,6 +43,7 @@ import {
   type ColleagueActivity,
   type RuntimeStatus,
 } from "./ColleaguePresence";
+import { ConnectorQuickTests } from "./ConnectorQuickTests";
 import { MessageContent } from "./MessageContent";
 import "./styles.css";
 
@@ -349,10 +350,9 @@ export function App({ voiceSupported = false }: AppProps) {
     }
   }
 
-  async function sendMessage(event?: FormEvent) {
-    event?.preventDefault();
-    const text = draft.trim();
-    if (!text || isSending) return;
+  async function submitText(rawText: string, clearDraft: boolean) {
+    const text = rawText.trim();
+    if (!text || isSending || voice.isBusy) return;
 
     followConversationRef.current = true;
     const humanMessageId = Date.now();
@@ -361,7 +361,7 @@ export function App({ voiceSupported = false }: AppProps) {
       ...current,
       { id: humanMessageId, role: "human", text, time: "現在" },
     ]);
-    setDraft("");
+    if (clearDraft) setDraft("");
     setNotice("Ada 正在思考…");
     setIsSending(true);
     let streamedText = "";
@@ -419,6 +419,11 @@ export function App({ voiceSupported = false }: AppProps) {
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function sendMessage(event?: FormEvent) {
+    event?.preventDefault();
+    await submitText(draft, true);
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -690,6 +695,10 @@ export function App({ voiceSupported = false }: AppProps) {
             </ol>
 
             <div className="composer-wrap">
+              <ConnectorQuickTests
+                disabled={isSending || voice.isBusy}
+                onRun={(prompt) => void submitText(prompt, false)}
+              />
               {notice && <div className="notice" role="status" aria-label={notice}>{notice}</div>}
               {voice.isRecording && (
                 <div className="recording-banner" role="status">
@@ -766,8 +775,10 @@ export function App({ voiceSupported = false }: AppProps) {
                 <strong>{runtimeAccount.account.email ?? runtimeAccount.account.type}</strong>。
               </p>
               <p>
-                Gmail 等服務會在各自的官方 OAuth 頁面選擇另一個帳號，
-                不需要為此切換 Codex 帳號。
+                若官方連接頁先要求登入 ChatGPT，請先登入上方這個 Codex 帳號。
+              </p>
+              <p>
+                進入 OAuth 後，再選擇 Gmail、Notion 等服務帳號；服務帳號可以不同。
               </p>
             </>
           ) : (
