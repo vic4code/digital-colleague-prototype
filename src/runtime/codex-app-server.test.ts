@@ -555,6 +555,73 @@ describe("CodexAppServerRuntime", () => {
     await runtime.close();
   });
 
+  it("uses app/list for OAuth guidance when plugin/read temporarily fails", async () => {
+    const server = new FakeAppServer((message, fake) => {
+      if (message.method === "plugin/read") {
+        fake.send({
+          id: message.id,
+          error: { code: -32603, message: "temporary plugin read failure" },
+        });
+        return;
+      }
+      if (replyToHandshakeAndThread(message, fake)) return;
+      if (message.method === "turn/start") {
+        fake.send({
+          id: message.id,
+          result: { turn: { id: "unexpected-model-turn", status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "unexpected-model-turn",
+            item: {
+              type: "agentMessage",
+              id: "unexpected-message",
+              text: "connector binding 無法解析",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: {
+              id: "unexpected-model-turn",
+              status: "completed",
+              items: [],
+            },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    await expect(
+      runtime.respond(
+        colleague,
+        history,
+        turn("幫我看看最近有哪些信需要處理"),
+      ),
+    ).resolves.toEqual({
+      text:
+        "Gmail plugin 已安裝，但目前這個 Codex 登入帳號還無法存取 Gmail connector。\n\n" +
+        "[連接 Gmail](https://chatgpt.com/apps/gmail/connector_2128aebfecb84f64a069897515042a44)\n\n" +
+        "請在官方頁面完成 OAuth，並選擇你要連接的 Gmail 帳號。完成後回來告訴我「重新檢查 Gmail」。",
+    });
+    expect(
+      server.messages.filter((message) => message.method === "app/list"),
+    ).toHaveLength(2);
+    expect(
+      server.messages.filter((message) => message.method === "turn/start"),
+    ).toHaveLength(0);
+    await runtime.close();
+  });
+
   it("reads installed connectors from a remote curated marketplace", async () => {
     const server = new FakeAppServer((message, fake) => {
       if (message.method === "plugin/installed") {

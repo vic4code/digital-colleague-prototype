@@ -303,6 +303,81 @@ describe("native workspace connector selection", () => {
     expect(connected.accessibleConnectorCount).toBe(1);
   });
 
+  it("recovers the official connection action from app inventory when plugin binding is unavailable", () => {
+    const [selection] = selectNativeConnectors(
+      pluginInventory,
+      "幫我看看最近有哪些信需要處理",
+    );
+    const snapshot = buildNativeWorkspaceSnapshot(
+      [{ selection }],
+      {
+        data: [
+          {
+            id: "connector_gmail",
+            name: "Gmail",
+            installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
+            isAccessible: false,
+            isEnabled: true,
+          },
+        ],
+        complete: true,
+      },
+    );
+
+    expect(snapshot.context).not.toContain("plugin binding 無法解析");
+    expect(snapshot.inputs).toContainEqual({
+      type: "mention",
+      name: "Gmail",
+      path: "app://connector_gmail",
+    });
+    expect(snapshot.connectionActions).toEqual([
+      {
+        label: "Gmail",
+        installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
+      },
+    ]);
+  });
+
+  it("forbids invented UI instructions when no trusted connection URL is available", () => {
+    const [selection] = selectNativeConnectors(
+      pluginInventory,
+      "幫我看看最近有哪些信需要處理",
+    );
+    const snapshot = buildNativeWorkspaceSnapshot([{ selection }], undefined);
+
+    expect(snapshot.context).toContain("plugin binding 無法解析");
+    expect(snapshot.context).toContain(
+      "不得猜測或捏造工具、Connectors、設定頁的操作路徑",
+    );
+  });
+
+  it("rejects an invalid app id discovered through the name fallback", () => {
+    const [selection] = selectNativeConnectors(
+      pluginInventory,
+      "幫我看看最近有哪些信需要處理",
+    );
+    const snapshot = buildNativeWorkspaceSnapshot(
+      [{ selection }],
+      {
+        data: [
+          {
+            id: "gmail\napp://unexpected",
+            name: "Gmail",
+            installUrl: "https://chatgpt.com/apps/gmail/connector_gmail",
+            isAccessible: false,
+            isEnabled: true,
+          },
+        ],
+        complete: true,
+      },
+    );
+
+    expect(
+      snapshot.inputs.filter((input) => input.path.startsWith("app://")),
+    ).toEqual([]);
+    expect(snapshot.connectionActions).toEqual([]);
+  });
+
   it("does not inject an unexpected plugin skill from connector metadata", () => {
     const [selection] = selectNativeConnectors(
       pluginInventory,

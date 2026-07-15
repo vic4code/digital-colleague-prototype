@@ -11,8 +11,10 @@ import type { MemoryEntry } from "./memory.js";
 import {
   buildNativeWorkspaceSnapshot,
   isComputerUseIntent,
+  isNativeAppId,
   nativeAppIds,
   nativeConnectorIntentKey,
+  nativeUnresolvedAppNames,
   selectNativeConnectors,
   type NativeAppInventory,
   type NativePluginResolution,
@@ -481,9 +483,15 @@ class CodexAppServerClient {
     );
 
     const appIds = nativeAppIds(resolutions);
+    const appNames = new Set(nativeUnresolvedAppNames(resolutions));
     const appInventory =
-      appIds.length > 0
-        ? await this.resolveNativeApps(threadId, new Set(appIds), forceRefresh)
+      appIds.length > 0 || appNames.size > 0
+        ? await this.resolveNativeApps(
+            threadId,
+            new Set(appIds),
+            appNames,
+            forceRefresh,
+          )
         : undefined;
     return buildNativeWorkspaceSnapshot(resolutions, appInventory);
   }
@@ -491,10 +499,12 @@ class CodexAppServerClient {
   private async resolveNativeApps(
     threadId: string,
     targetIds: Set<string>,
+    targetNames: Set<string>,
     forceRefetch: boolean,
   ): Promise<NativeAppInventory> {
     const data: unknown[] = [];
-    const found = new Set<string>();
+    const foundIds = new Set<string>();
+    const foundNames = new Set<string>();
     const seenCursors = new Set<string>();
     let cursor: string | null = null;
 
@@ -514,16 +524,25 @@ class CodexAppServerClient {
       if (Array.isArray(page.data)) {
         data.push(...page.data);
         for (const rawApp of page.data) {
+          if (!isRecord(rawApp)) continue;
           if (
-            isRecord(rawApp) &&
-            typeof rawApp.id === "string" &&
+            isNativeAppId(rawApp.id) &&
             targetIds.has(rawApp.id)
           ) {
-            found.add(rawApp.id);
+            foundIds.add(rawApp.id);
+          }
+          if (typeof rawApp.name === "string") {
+            const normalizedName = rawApp.name.toLowerCase();
+            if (targetNames.has(normalizedName)) {
+              foundNames.add(normalizedName);
+            }
           }
         }
       }
-      if (found.size === targetIds.size) {
+      if (
+        foundIds.size === targetIds.size &&
+        foundNames.size === targetNames.size
+      ) {
         return { data, complete: page.nextCursor === null };
       }
       if (page.nextCursor === null) return { data, complete: true };

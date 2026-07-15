@@ -142,9 +142,14 @@ interface PluginDetail {
 
 interface AppInfo {
   id: string;
+  name?: string;
   installUrl?: string;
   isAccessible: boolean;
   isEnabled: boolean;
+}
+
+export function isNativeAppId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -374,9 +379,9 @@ function parsePluginDetail(value: unknown): PluginDetail | undefined {
   for (const rawApp of rawApps) {
     if (
       !isRecord(rawApp) ||
-      typeof rawApp.id !== "string" ||
+      !isNativeAppId(rawApp.id) ||
       typeof rawApp.name !== "string" ||
-      !/^[A-Za-z0-9_-]+$/.test(rawApp.id)
+      rawApp.name.trim().length === 0
     ) {
       continue;
     }
@@ -408,7 +413,7 @@ function parsePluginDetail(value: unknown): PluginDetail | undefined {
 function parseAppInfo(value: unknown): AppInfo | undefined {
   if (
     !isRecord(value) ||
-    typeof value.id !== "string" ||
+    !isNativeAppId(value.id) ||
     typeof value.isAccessible !== "boolean" ||
     typeof value.isEnabled !== "boolean"
   ) {
@@ -416,6 +421,7 @@ function parseAppInfo(value: unknown): AppInfo | undefined {
   }
   return {
     id: value.id,
+    name: typeof value.name === "string" ? value.name : undefined,
     installUrl: safeInstallUrl(value.installUrl),
     isAccessible: value.isAccessible,
     isEnabled: value.isEnabled,
@@ -471,6 +477,28 @@ export function nativeAppIds(resolutions: NativePluginResolution[]): string[] {
     for (const app of detail?.apps ?? []) ids.add(app.id);
   }
   return [...ids];
+}
+
+export function nativeUnresolvedAppNames(
+  resolutions: NativePluginResolution[],
+): string[] {
+  const names = new Set<string>();
+  for (const resolution of resolutions) {
+    const { selection } = resolution;
+    if (
+      !selection.requiresApp ||
+      selection.installed !== true ||
+      selection.enabled !== true
+    ) {
+      continue;
+    }
+    const detail = parsePluginDetail(resolution.detail);
+    const declaredApp = detail?.apps.find(
+      (app) => slug(app.name) === slug(selection.label),
+    );
+    if (!declaredApp) names.add(selection.label.toLowerCase());
+  }
+  return [...names];
 }
 
 export function buildNativeWorkspaceSnapshot(
@@ -552,12 +580,21 @@ export function buildNativeWorkspaceSnapshot(
       );
       continue;
     }
-    const app = detail?.apps.find(
+    const declaredApp = detail?.apps.find(
       (candidate) => slug(candidate.name) === slug(selection.label),
     );
-    if (!detail || !app) {
+    const appInfo = declaredApp
+      ? apps.find((candidate) => candidate.id === declaredApp.id)
+      : apps.find(
+          (candidate) =>
+            candidate.name !== undefined &&
+            slug(candidate.name) === slug(selection.label),
+        );
+    const appId = declaredApp?.id ?? appInfo?.id;
+    if (!appId) {
       lines.push(
         `- ${selection.label} connector：plugin binding 無法解析，連線狀態未知。`,
+        `- 目前沒有可信的官方連接頁。不得猜測或捏造工具、Connectors、設定頁的操作路徑；只可請使用者稍後重新檢查 ${selection.label}。`,
       );
       continue;
     }
@@ -566,7 +603,7 @@ export function buildNativeWorkspaceSnapshot(
     addInput({
       type: "mention",
       name: selection.label,
-      path: `app://${app.id}`,
+      path: `app://${appId}`,
     });
     if (skill) {
       addToken(`$${skillSuffix(skill.name)}`);
@@ -576,7 +613,6 @@ export function buildNativeWorkspaceSnapshot(
         path: skill.path,
       });
     }
-    const appInfo = apps.find((candidate) => candidate.id === app.id);
     if (!appInfo) {
       lines.push(
         `- ${selection.label} connector：目前無法確認這個 Codex thread 的帳號連線狀態；不得把它誤報成 plugin 未安裝。`,
@@ -597,7 +633,7 @@ export function buildNativeWorkspaceSnapshot(
       );
     }
 
-    const installUrl = appInfo?.installUrl ?? app.installUrl;
+    const installUrl = appInfo?.installUrl ?? declaredApp?.installUrl;
     if (installUrl) {
       lines.push(`- 官方連接頁：${installUrl}`);
       if (appInfo?.isEnabled && !appInfo.isAccessible) {
