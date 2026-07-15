@@ -286,7 +286,7 @@ export function App({ voiceSupported = false }: AppProps) {
           <a className="brand" href="/" aria-label="數位同事首頁">
             <Avatar
               className="brand-mark"
-              src="/favicon.svg"
+              src="/ada-favicon.svg"
               alt="Ada"
             />
             <span>
