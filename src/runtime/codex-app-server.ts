@@ -92,10 +92,13 @@ interface TurnWaiter {
   resolve(text: string): void;
   reject(error: CodexAppServerError): void;
   timer: NodeJS.Timeout;
+  onDelta?: (delta: string) => void;
 }
 
 interface TurnState {
   messages: Map<string, AgentMessage>;
+  deltas: string[];
+  deltaListeners: Set<(delta: string) => void>;
   completion?: TurnCompletion;
   waiters: Set<TurnWaiter>;
   cleanupTimer: NodeJS.Timeout;
@@ -162,16 +165,26 @@ class CodexAppServerClient {
     return (await this.requestRaw(method, params)) as T;
   }
 
-  async waitForTurn(turnId: string): Promise<string> {
+  async waitForTurn(
+    turnId: string,
+    onDelta?: (delta: string) => void,
+  ): Promise<string> {
     const state = this.turnState(turnId);
     if (state.completion) return this.consumeCompletedTurn(turnId, state);
+
+    if (onDelta) {
+      for (const delta of state.deltas) onDelta(delta);
+      state.deltaListeners.add(onDelta);
+    }
 
     return new Promise<string>((resolve, reject) => {
       const waiter: TurnWaiter = {
         resolve,
         reject,
+        onDelta,
         timer: setTimeout(() => {
           state.waiters.delete(waiter);
+          if (waiter.onDelta) state.deltaListeners.delete(waiter.onDelta);
           if (state.waiters.size === 0) this.deleteTurn(turnId);
           reject(
             new CodexAppServerError("TIMEOUT", "Codex took too long to reply."),
@@ -584,6 +597,16 @@ class CodexAppServerClient {
       }
       return;
     }
+    if (message.method === "item/agentMessage/delta") {
+      const turnId = message.params.turnId;
+      const delta = message.params.delta;
+      if (typeof turnId === "string" && typeof delta === "string" && delta) {
+        const state = this.turnState(turnId);
+        state.deltas.push(delta);
+        for (const listener of state.deltaListeners) listener(delta);
+      }
+      return;
+    }
     if (message.method === "turn/completed") {
       const turn = message.params.turn;
       if (!isRecord(turn) || typeof turn.id !== "string") return;
@@ -605,6 +628,7 @@ class CodexAppServerClient {
         }
         for (const waiter of state.waiters) {
           clearTimeout(waiter.timer);
+          if (waiter.onDelta) state.deltaListeners.delete(waiter.onDelta);
           if (typeof result === "string") waiter.resolve(result);
           else waiter.reject(result);
         }
@@ -637,6 +661,8 @@ class CodexAppServerClient {
     if (existing) return existing;
     const state: TurnState = {
       messages: new Map(),
+      deltas: [],
+      deltaListeners: new Set(),
       waiters: new Set(),
       cleanupTimer: setTimeout(
         () => this.deleteTurn(turnId),
@@ -749,6 +775,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
     colleague: Colleague,
     history: MemoryEntry[],
     turn: Turn,
+    onDelta?: (delta: string) => void,
   ): Promise<Reply> {
     if (this.closed) {
       throw new CodexAppServerError(
@@ -760,7 +787,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
     const previous = this.queues.get(key) ?? Promise.resolve();
     const queued = previous
       .catch(() => undefined)
-      .then(() => this.respondSerially(key, colleague, history, turn));
+      .then(() => this.respondSerially(key, colleague, history, turn, onDelta));
     const settled = queued.then(
       () => undefined,
       () => undefined,
@@ -785,6 +812,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
     colleague: Colleague,
     history: MemoryEntry[],
     turn: Turn,
+    onDelta?: (delta: string) => void,
   ): Promise<Reply> {
     try {
       let nativeThreadId = this.nativeThreads.get(key);
@@ -860,7 +888,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
           "Codex app-server did not return a turn id.",
         );
       }
-      const text = await this.client.waitForTurn(startedTurn.turn.id);
+      const text = await this.client.waitForTurn(startedTurn.turn.id, onDelta);
       return { text };
     } catch (error) {
       this.nativeThreads.delete(key);

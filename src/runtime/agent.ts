@@ -15,6 +15,7 @@ export interface AgentRuntime {
     colleague: Colleague,
     history: MemoryEntry[],
     turn: Turn,
+    onDelta?: (delta: string) => void,
   ): Promise<Reply>;
   close?(): Promise<void>;
 }

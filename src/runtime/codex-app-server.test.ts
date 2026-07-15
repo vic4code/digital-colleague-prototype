@@ -401,6 +401,72 @@ describe("CodexAppServerRuntime", () => {
     await runtime.close();
   });
 
+  it("streams visible answer deltas before the turn completes", async () => {
+    let nativeTurnId = "";
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake)) return;
+      if (message.method === "turn/start") {
+        nativeTurnId = "streaming-turn";
+        fake.send({
+          id: message.id,
+          result: { turn: { id: nativeTurnId, status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "native-thread",
+            turnId: nativeTurnId,
+            itemId: "streaming-message",
+            delta: "收",
+          },
+        });
+        fake.send({
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "native-thread",
+            turnId: nativeTurnId,
+            itemId: "streaming-message",
+            delta: "到",
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 500,
+    });
+    const deltas: string[] = [];
+
+    const response = runtime.respond(colleague, [], turn("hello"), (delta) => {
+      deltas.push(delta);
+    });
+
+    await vi.waitFor(() => expect(deltas).toEqual(["收", "到"]));
+    server.send({
+      method: "item/completed",
+      params: {
+        threadId: "native-thread",
+        turnId: nativeTurnId,
+        item: {
+          type: "agentMessage",
+          id: "streaming-message",
+          text: "收到",
+          phase: "final_answer",
+        },
+      },
+    });
+    server.send({
+      method: "turn/completed",
+      params: {
+        threadId: "native-thread",
+        turn: { id: nativeTurnId, status: "completed", items: [] },
+      },
+    });
+
+    await expect(response).resolves.toEqual({ text: "收到" });
+    await runtime.close();
+  });
+
   it("loads Computer Use only for an explicit screen-control turn", async () => {
     const server = new FakeAppServer((message, fake) => {
       if (replyToHandshakeAndThread(message, fake)) return;
