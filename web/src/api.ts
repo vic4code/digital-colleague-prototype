@@ -31,8 +31,26 @@ export class ApiError extends Error {
 
 export interface ProactiveEvent {
   eventId: string;
-  source: "gmail" | "outlook" | "calendar" | "slack" | "notion" | "system";
+  taskId?: string;
+  source:
+    | "gmail"
+    | "outlook"
+    | "teams"
+    | "calendar"
+    | "slack"
+    | "notion"
+    | "system";
   type: string;
+  phase?:
+    | "received"
+    | "triaging"
+    | "awaiting_approval"
+    | "sending"
+    | "cancelling"
+    | "cancelled"
+    | "completed"
+    | "failed";
+  replyPolicy?: "none" | "approval_required";
   title: string;
   summary?: string;
   occurredAt: string;
@@ -87,6 +105,21 @@ export async function getProactiveEvents(): Promise<ProactiveEvent[]> {
     headers: { accept: "application/json" },
   });
   return readPayload<ProactiveEvent[]>(response);
+}
+
+export async function cancelProactiveTask(taskId: string): Promise<ProactiveEvent> {
+  const response = await fetch(
+    `/api/v1/tasks/${encodeURIComponent(taskId)}/cancel`,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({}),
+    },
+  );
+  return readPayload<ProactiveEvent>(response);
 }
 
 export function subscribeToProactiveEvents(handlers: {

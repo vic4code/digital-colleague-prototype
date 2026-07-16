@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "enabled": true,
+  "mode": "owner_only",
+  "mailbox": "cathayaids@gmail.com",
+  "allowedSenders": [
+    "victor820131@gmail.com"
+  ],
+  "allowedReplyKinds": [
+    "acknowledgement",
+    "clarifying_question",
+    "status_update"
+  ],
+  "requireSameThread": true,
+  "allowNewRecipients": false,
+  "allowCc": false,
+  "allowBcc": false,
+  "allowAttachments": false,
+  "maxRepliesPerMessage": 1,
+  "maxBodyCharacters": 2000,
+  "interruptible": true,
+  "escalateOn": [
+    "sender_not_allowlisted",
+    "ambiguous_or_missing_context",
+    "legal_or_financial_commitment",
+    "credential_or_sensitive_data",
+    "attachment_or_external_link",
+    "recipient_change",
+    "connector_account_unknown_or_mismatch"
+  ]
+}

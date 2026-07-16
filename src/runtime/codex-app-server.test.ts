@@ -1,6 +1,9 @@
 import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Colleague, Turn } from "../colleague/types.js";
 import { makeRuntime } from "./agent.js";
 import type { MemoryEntry } from "./memory.js";
@@ -11,12 +14,32 @@ import {
 } from "./codex-app-server.js";
 
 type ProtocolMessage = {
-  id?: number;
+  id?: number | string;
   method?: string;
   params?: Record<string, unknown>;
   result?: unknown;
   error?: unknown;
 };
+
+const GMAIL_CONNECTOR_ID = "connector_2128aebfecb84f64a069897515042a44";
+const TEST_POLICY_OWNER = "owner@example.com";
+const SAFE_APPROVED_SEND = {
+  to: TEST_POLICY_OWNER,
+  subject: "Re: Project update",
+  body: "收到，謝謝。\n\nAda",
+  content_type: "text/plain",
+  reply_message_id: "18f0abc_DEF-123",
+} as const;
+const UNVERIFIED_GMAIL_SEND_TEXT =
+  "尚未確認寄出：Codex app-server 沒有回報符合本回合 Gmail connector 的成功寄信工具結果，因此不能將這封信視為已寄出。";
+
+const temporaryPolicyDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryPolicyDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  );
+});
 
 class FakeAppServer extends EventEmitter implements AppServerProcess {
   readonly stdin = new PassThrough();
@@ -99,6 +122,385 @@ function turn(text: string): Turn {
     text,
     at: "2026-07-14T10:01:00.000Z",
   };
+}
+
+async function colleagueWithEmailPolicy(
+  overrides: Record<string, unknown> = {},
+): Promise<Colleague> {
+  const dir = await mkdtemp(join(tmpdir(), "digital-colleague-email-policy-"));
+  temporaryPolicyDirs.push(dir);
+  await mkdir(join(dir, "policies"));
+  await writeFile(
+    join(dir, "policies", "email-automation.json"),
+    JSON.stringify({
+      version: 1,
+      enabled: true,
+      mode: "owner_only",
+      mailbox: "cathayaids@gmail.com",
+      allowedSenders: [TEST_POLICY_OWNER],
+      allowedReplyKinds: ["acknowledgement"],
+      requireSameThread: true,
+      allowNewRecipients: false,
+      allowCc: false,
+      allowBcc: false,
+      allowAttachments: false,
+      maxRepliesPerMessage: 1,
+      maxBodyCharacters: 2000,
+      interruptible: true,
+      escalateOn: [],
+      ...overrides,
+    }),
+    "utf8",
+  );
+  return { ...colleague, dir };
+}
+
+function gmailApprovalParams(
+  send: Record<string, unknown> = SAFE_APPROVED_SEND,
+): Record<string, unknown> {
+  return {
+    threadId: "native-thread",
+    turnId: "approval-bridge-turn-2",
+    serverName: "codex_apps",
+    mode: "form",
+    message: "Allow Gmail to send this email?",
+    requestedSchema: { type: "object", properties: {} },
+    _meta: {
+      codex_approval_kind: "mcp_tool_call",
+      source: "connector",
+      connector_id: GMAIL_CONNECTOR_ID,
+      connector_name: "Gmail",
+      tool_title: "send_email",
+      tool_params_display: Object.entries(send).map(([name, value]) => ({
+        name,
+        display_name: name,
+        value,
+      })),
+    },
+  };
+}
+
+function gmailApprovalParamsWith(
+  paramsOverrides: Record<string, unknown> = {},
+  metaOverrides: Record<string, unknown> = {},
+  send: Record<string, unknown> = SAFE_APPROVED_SEND,
+): Record<string, unknown> {
+  const base = gmailApprovalParams(send);
+  return {
+    ...base,
+    ...paramsOverrides,
+    _meta: {
+      ...(isTestRecord(base._meta) ? base._meta : {}),
+      ...metaOverrides,
+    },
+  };
+}
+
+function gmailSendToolItem(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const { appContext, ...topLevelOverrides } = overrides;
+  const appContextOverride = isTestRecord(appContext)
+    ? appContext
+    : {};
+  return {
+    type: "mcpToolCall",
+    id: "approved-gmail-send-tool",
+    server: "codex_apps",
+    tool: "gmail.send_email",
+    status: "completed",
+    arguments: { ...SAFE_APPROVED_SEND },
+    pluginId: "gmail@openai-curated",
+    result: { content: [], structuredContent: null, _meta: null },
+    error: null,
+    durationMs: 10,
+    ...topLevelOverrides,
+    appContext: {
+      connectorId: GMAIL_CONNECTOR_ID,
+      linkId: "gmail-link",
+      resourceUri: null,
+      appName: "Gmail",
+      templateId: null,
+      actionName: "send_email",
+      ...appContextOverride,
+    },
+  };
+}
+
+function gmailDraftContract(
+  send: Record<string, unknown> = SAFE_APPROVED_SEND,
+): string {
+  return (
+    "模型描述不得成為核准內容。\n" +
+    `<ada-gmail-draft>${JSON.stringify(send)}</ada-gmail-draft>`
+  );
+}
+
+function gmailProfileToolItem(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const { appContext, ...topLevelOverrides } = overrides;
+  return {
+    type: "mcpToolCall",
+    id: "gmail-profile-tool",
+    server: "codex_apps",
+    tool: "gmail.get_profile",
+    status: "completed",
+    arguments: {},
+    result: {
+      content: [],
+      structuredContent: { email: "cathayaids@gmail.com" },
+      _meta: null,
+    },
+    error: null,
+    ...topLevelOverrides,
+    appContext: {
+      connectorId: GMAIL_CONNECTOR_ID,
+      linkId: "gmail-link",
+      appName: "Gmail",
+      actionName: "get_profile",
+      ...(isTestRecord(appContext) ? appContext : {}),
+    },
+  };
+}
+
+function gmailReadThreadToolItem(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const { appContext, ...topLevelOverrides } = overrides;
+  return {
+    type: "mcpToolCall",
+    id: "gmail-read-thread-tool",
+    server: "codex_apps",
+    tool: "gmail.read_email_thread",
+    status: "completed",
+    arguments: {
+      id: SAFE_APPROVED_SEND.reply_message_id,
+      id_type: "message",
+      max_messages: 3,
+    },
+    result: {
+      content: [],
+      structuredContent: {
+        thread_id: "gmail-thread",
+        messages: [
+          {
+            id: SAFE_APPROVED_SEND.reply_message_id,
+            thread_id: "gmail-thread",
+            from_: `Owner <${TEST_POLICY_OWNER}>`,
+            to: ["Cathay AIDS <cathayaids@gmail.com>"],
+          },
+        ],
+      },
+      _meta: null,
+    },
+    error: null,
+    ...topLevelOverrides,
+    appContext: {
+      connectorId: GMAIL_CONNECTOR_ID,
+      linkId: "gmail-link",
+      appName: "Gmail",
+      actionName: "read_email_thread",
+      ...(isTestRecord(appContext) ? appContext : {}),
+    },
+  };
+}
+
+function gmailReadThreadToolItemWithMessage(
+  messageOverrides: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return gmailReadThreadToolItem({
+    ...overrides,
+    result: {
+      content: [],
+      structuredContent: {
+        thread_id: "gmail-thread",
+        messages: [
+          {
+            id: SAFE_APPROVED_SEND.reply_message_id,
+            thread_id: "gmail-thread",
+            from_: `Owner <${TEST_POLICY_OWNER}>`,
+            to: ["Cathay AIDS <cathayaids@gmail.com>"],
+            ...messageOverrides,
+          },
+        ],
+      },
+      _meta: null,
+    },
+  });
+}
+
+function isTestRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+interface ApprovalBridgeScenario {
+  draftRequestText?: string;
+  approvalParams?: Record<string, unknown>;
+  approvalText?: string;
+  approvalExternalThreadId?: string;
+  duplicateElicitation?: boolean;
+  policyOverrides?: Record<string, unknown>;
+  toolItem?: Record<string, unknown> | null;
+  toolNotificationThreadId?: string;
+  toolNotificationTurnId?: string;
+  profileToolItem?: Record<string, unknown> | null;
+  readThreadToolItem?: Record<string, unknown> | null;
+}
+
+async function runApprovalBridgeScenario(
+  scenario: ApprovalBridgeScenario = {},
+): Promise<{
+  preview: { text: string };
+  previewDeltas: string[];
+  reply: { text: string };
+  server: FakeAppServer;
+  elicitationResponses: ProtocolMessage[];
+}> {
+  const testColleague = await colleagueWithEmailPolicy(scenario.policyOverrides);
+  const firstRequestId = 9_101;
+  const duplicateRequestId = 9_102;
+  let turnNumber = 0;
+  let waitingForDuplicate = false;
+  const server = new FakeAppServer((message, fake) => {
+    if (replyToHandshakeAndThread(message, fake, true)) return;
+    if (message.method === "turn/start") {
+      turnNumber += 1;
+      const nativeTurnId = `approval-bridge-turn-${turnNumber}`;
+      fake.send({
+        id: message.id,
+        result: { turn: { id: nativeTurnId, status: "inProgress" } },
+      });
+      if (turnNumber === 1) {
+        sendCompletedAgentTurn(fake, nativeTurnId, gmailDraftContract());
+      } else {
+        for (const item of [
+          scenario.profileToolItem === undefined
+            ? gmailProfileToolItem()
+            : scenario.profileToolItem,
+          scenario.readThreadToolItem === undefined
+            ? gmailReadThreadToolItem()
+            : scenario.readThreadToolItem,
+        ]) {
+          if (item) {
+            fake.send({
+              method: "item/completed",
+              params: {
+                threadId: "native-thread",
+                turnId: nativeTurnId,
+                item,
+              },
+            });
+          }
+        }
+        fake.send({
+          id: firstRequestId,
+          method: "mcpServer/elicitation/request",
+          params: scenario.approvalParams ?? gmailApprovalParams(),
+        });
+      }
+      return;
+    }
+    if (message.id === firstRequestId && message.method === undefined) {
+      if (scenario.duplicateElicitation) {
+        waitingForDuplicate = true;
+        fake.send({
+          id: duplicateRequestId,
+          method: "mcpServer/elicitation/request",
+          params: scenario.approvalParams ?? gmailApprovalParams(),
+        });
+        return;
+      }
+      sendApprovalTurnCompletion(fake, scenario);
+      return;
+    }
+    if (
+      waitingForDuplicate &&
+      message.id === duplicateRequestId &&
+      message.method === undefined
+    ) {
+      waitingForDuplicate = false;
+      sendApprovalTurnCompletion(fake, scenario);
+    }
+  });
+  const runtime = new CodexAppServerRuntime({
+    startProcess: () => server,
+    timeoutMs: 500,
+  });
+  try {
+    const previewDeltas: string[] = [];
+    const preview = await runtime.respond(
+      testColleague,
+      [],
+      turn(
+        scenario.draftRequestText ??
+          `請用 Gmail 回信給 ${TEST_POLICY_OWNER}，先給我草稿再等我確認。`,
+      ),
+      (delta) => previewDeltas.push(delta),
+    );
+    const reply = await runtime.respond(testColleague, [], {
+      ...turn(scenario.approvalText ?? "確認寄出"),
+      threadId: scenario.approvalExternalThreadId ?? "browser-thread",
+    });
+    return {
+      preview,
+      previewDeltas,
+      reply,
+      server,
+      elicitationResponses: server.messages.filter(
+        (message) =>
+          (message.id === firstRequestId || message.id === duplicateRequestId) &&
+          message.method === undefined,
+      ),
+    };
+  } finally {
+    await runtime.close();
+  }
+}
+
+function sendCompletedAgentTurn(
+  server: FakeAppServer,
+  turnId: string,
+  text: string,
+): void {
+  server.send({
+    method: "item/completed",
+    params: {
+      threadId: "native-thread",
+      turnId,
+      item: {
+        type: "agentMessage",
+        id: `${turnId}-message`,
+        text,
+        phase: "final_answer",
+      },
+    },
+  });
+  server.send({
+    method: "turn/completed",
+    params: {
+      threadId: "native-thread",
+      turn: { id: turnId, status: "completed", items: [] },
+    },
+  });
+}
+
+function sendApprovalTurnCompletion(
+  server: FakeAppServer,
+  scenario: ApprovalBridgeScenario,
+): void {
+  if (scenario.toolItem !== null) {
+    server.send({
+      method: "item/completed",
+      params: {
+        threadId: scenario.toolNotificationThreadId ?? "native-thread",
+        turnId: scenario.toolNotificationTurnId ?? "approval-bridge-turn-2",
+        item: scenario.toolItem ?? gmailSendToolItem(),
+      },
+    });
+  }
+  sendCompletedAgentTurn(server, "approval-bridge-turn-2", "已成功寄出郵件。");
 }
 
 function replyToHandshakeAndThread(
@@ -480,6 +882,1069 @@ describe("CodexAppServerRuntime", () => {
     expect(JSON.stringify(turns[0]?.params?.input)).toContain(
       "@gmail $gmail $gmail-inbox-triage",
     );
+    await runtime.close();
+  });
+
+  it.each(["批准寄出", "確認寄出"])(
+    "carries the Gmail connector for one immutable same-thread draft approval: %s",
+    async (approvalText) => {
+      let turnNumber = 0;
+      const server = new FakeAppServer((message, fake) => {
+        if (replyToHandshakeAndThread(message, fake, true)) return;
+        if (message.method === "turn/start") {
+          turnNumber += 1;
+          const nativeTurnId = `gmail-approval-turn-${turnNumber}`;
+          fake.send({
+            id: message.id,
+            result: { turn: { id: nativeTurnId, status: "inProgress" } },
+          });
+          fake.send({
+            method: "item/completed",
+            params: {
+              threadId: "native-thread",
+              turnId: nativeTurnId,
+              item: {
+                type: "agentMessage",
+                id: `gmail-approval-message-${turnNumber}`,
+                text:
+                  turnNumber === 1
+                    ? gmailDraftContract()
+                    : "尚未透過正式核准橋接寄出。",
+                phase: "final_answer",
+              },
+            },
+          });
+          fake.send({
+            method: "turn/completed",
+            params: {
+              threadId: "native-thread",
+              turn: { id: nativeTurnId, status: "completed", items: [] },
+            },
+          });
+        }
+      });
+      const runtime = new CodexAppServerRuntime({
+        startProcess: () => server,
+        timeoutMs: 250,
+      });
+      const policyColleague = await colleagueWithEmailPolicy();
+
+      await runtime.respond(
+        policyColleague,
+        [],
+        turn(`請用 Gmail 回信給 ${TEST_POLICY_OWNER}，先給我草稿再等我確認。`),
+      );
+      await runtime.respond(policyColleague, [], turn(approvalText));
+      const replay = await runtime.respond(policyColleague, [], turn(approvalText));
+
+      const turns = server.messages.filter(
+        (message) => message.method === "turn/start",
+      );
+      expect(turns).toHaveLength(2);
+      expect(JSON.stringify(turns[1]?.params?.input)).toContain(
+        "app://connector_2128aebfecb84f64a069897515042a44",
+      );
+      expect(JSON.stringify(turns[1]?.params?.input)).toContain(approvalText);
+      expect(JSON.stringify(turns[1]?.params?.input)).toContain(
+        SAFE_APPROVED_SEND.reply_message_id,
+      );
+      expect(JSON.stringify(turns[1]?.params?.input)).toContain(TEST_POLICY_OWNER);
+      expect(replay.text).toContain(
+        "目前沒有一份已顯示且等待核准的 Gmail 草稿",
+      );
+      const appLists = server.messages.filter(
+        (message) => message.method === "app/list",
+      );
+      expect(appLists.some((message) => message.params?.forceRefetch === true)).toBe(
+        true,
+      );
+      await runtime.close();
+    },
+  );
+
+  it("force-refreshes a transient Gmail binding on exact same-thread approval", async () => {
+    let appListCount = 0;
+    let turnNumber = 0;
+    const server = new FakeAppServer((message, fake) => {
+      if (message.method === "plugin/read") {
+        fake.send({
+          id: message.id,
+          error: { code: -32603, message: "remote plugin detail unavailable" },
+        });
+        return;
+      }
+      if (message.method === "app/list") {
+        appListCount += 1;
+        fake.send({
+          id: message.id,
+          result: {
+            data: [
+              {
+                id: GMAIL_CONNECTOR_ID,
+                name: "Gmail",
+                isAccessible: true,
+                isEnabled: true,
+              },
+            ],
+            nextCursor: null,
+          },
+        });
+        return;
+      }
+      if (replyToHandshakeAndThread(message, fake)) return;
+      if (message.method === "turn/start") {
+        turnNumber += 1;
+        const nativeTurnId = `transient-binding-turn-${turnNumber}`;
+        fake.send({
+          id: message.id,
+          result: { turn: { id: nativeTurnId, status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: nativeTurnId,
+            item: {
+              type: "agentMessage",
+              id: `transient-binding-message-${turnNumber}`,
+              text: turnNumber === 1 ? gmailDraftContract() : "尚未寄出。",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: { id: nativeTurnId, status: "completed", items: [] },
+          },
+        });
+      }
+    });
+    const policyColleague = await colleagueWithEmailPolicy();
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    await runtime.respond(
+      policyColleague,
+      [],
+      turn("請用 Gmail 回信給 owner@example.com，先給我草稿再等我批准寄出。"),
+    );
+    await runtime.respond(policyColleague, [], turn("批准寄出"));
+
+    const turns = server.messages.filter(
+      (message) => message.method === "turn/start",
+    );
+    expect(appListCount).toBe(2);
+    expect(
+      server.messages.filter((message) => message.method === "app/list")[1]
+        ?.params?.forceRefetch,
+    ).toBe(true);
+    expect(JSON.stringify(turns[1]?.params?.input)).toContain(
+      `app://${GMAIL_CONNECTOR_ID}`,
+    );
+    await runtime.close();
+  });
+
+  it.each(["可以", "今天天氣如何", "確認寄出！"])(
+    "clears a pending Gmail continuation after an intervening turn: %s",
+    async (interveningText) => {
+      let turnNumber = 0;
+      const server = new FakeAppServer((message, fake) => {
+        if (replyToHandshakeAndThread(message, fake, true)) return;
+        if (message.method === "turn/start") {
+          turnNumber += 1;
+          const nativeTurnId = `intervening-turn-${turnNumber}`;
+          fake.send({
+            id: message.id,
+            result: { turn: { id: nativeTurnId, status: "inProgress" } },
+          });
+          fake.send({
+            method: "item/completed",
+            params: {
+              threadId: "native-thread",
+              turnId: nativeTurnId,
+              item: {
+                type: "agentMessage",
+                id: `intervening-message-${turnNumber}`,
+                text: turnNumber === 1 ? gmailDraftContract() : "收到。",
+                phase: "final_answer",
+              },
+            },
+          });
+          fake.send({
+            method: "turn/completed",
+            params: {
+              threadId: "native-thread",
+              turn: { id: nativeTurnId, status: "completed", items: [] },
+            },
+          });
+        }
+      });
+      const runtime = new CodexAppServerRuntime({
+        startProcess: () => server,
+        timeoutMs: 250,
+      });
+      const policyColleague = await colleagueWithEmailPolicy();
+
+      await runtime.respond(
+        policyColleague,
+        [],
+        turn(`請用 Gmail 回信給 ${TEST_POLICY_OWNER}，先給我草稿再等我確認。`),
+      );
+      await runtime.respond(policyColleague, [], turn(interveningText));
+      const expired = await runtime.respond(
+        policyColleague,
+        [],
+        turn("確認寄出"),
+      );
+
+      const turns = server.messages.filter(
+        (message) => message.method === "turn/start",
+      );
+      expect(turns).toHaveLength(2);
+      expect(JSON.stringify(turns[1]?.params?.input)).not.toContain(
+        "app://connector_2128aebfecb84f64a069897515042a44",
+      );
+      expect(expired.text).toContain(
+        "目前沒有一份已顯示且等待核准的 Gmail 草稿",
+      );
+      await runtime.close();
+    },
+  );
+
+  it("does not carry a pending Gmail continuation into another external thread", async () => {
+    let turnNumber = 0;
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake, true)) return;
+      if (message.method === "turn/start") {
+        turnNumber += 1;
+        const nativeTurnId = `isolated-turn-${turnNumber}`;
+        fake.send({
+          id: message.id,
+          result: { turn: { id: nativeTurnId, status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: nativeTurnId,
+            item: {
+              type: "agentMessage",
+              id: `isolated-message-${turnNumber}`,
+              text: gmailDraftContract(),
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: { id: nativeTurnId, status: "completed", items: [] },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+    const policyColleague = await colleagueWithEmailPolicy();
+
+    await runtime.respond(
+      policyColleague,
+      [],
+      turn(`請用 Gmail 回信給 ${TEST_POLICY_OWNER}，先給我草稿再等我確認。`),
+    );
+    const isolated = await runtime.respond(policyColleague, [], {
+      ...turn("確認寄出"),
+      threadId: "another-browser-thread",
+    });
+
+    const turns = server.messages.filter(
+      (message) => message.method === "turn/start",
+    );
+    expect(turns).toHaveLength(1);
+    expect(isolated.text).toContain(
+      "目前沒有一份已顯示且等待核准的 Gmail 草稿",
+    );
+    await runtime.close();
+  });
+
+  it("accepts one policy-bound Gmail send approval and declines a duplicate", async () => {
+    const { reply, elicitationResponses } = await runApprovalBridgeScenario({
+      duplicateElicitation: true,
+    });
+
+    expect(elicitationResponses).toEqual([
+      {
+        id: 9_101,
+        result: { action: "accept", content: null, _meta: null },
+      },
+      {
+        id: 9_102,
+        result: { action: "decline", content: null, _meta: null },
+      },
+    ]);
+    expect(reply).toEqual({ text: "已成功寄出郵件。" });
+  });
+
+  it("renders the immutable runtime draft instead of model-authored preview prose", async () => {
+    const { preview, previewDeltas } = await runApprovalBridgeScenario();
+
+    expect(preview.text).toContain("Gmail 回覆草稿（核准後只會照這份內容寄出）");
+    expect(preview.text).toContain('"mailbox": "cathayaids@gmail.com"');
+    expect(preview.text).toContain(`"to": "${TEST_POLICY_OWNER}"`);
+    expect(preview.text).toContain(`"subject": "${SAFE_APPROVED_SEND.subject}"`);
+    expect(preview.text).toContain(JSON.stringify(SAFE_APPROVED_SEND.body).slice(1, -1));
+    expect(preview.text).toContain(SAFE_APPROVED_SEND.reply_message_id);
+    expect(preview.text).not.toContain("模型描述不得成為核准內容");
+    expect(preview.text).not.toContain("ada-gmail-draft");
+    expect(previewDeltas).toEqual([preview.text]);
+  });
+
+  it.each([
+    `請答覆 ${TEST_POLICY_OWNER} 的郵件`,
+    `請回應 ${TEST_POLICY_OWNER} 的郵件`,
+    `回覆 ${TEST_POLICY_OWNER} 那封信`,
+  ])("routes the natural reply request through immutable draft capture: %s", async (text) => {
+    const { preview } = await runApprovalBridgeScenario({ draftRequestText: text });
+
+    expect(preview.text).toContain("Gmail 回覆草稿（核准後只會照這份內容寄出）");
+    expect(preview.text).not.toContain("ada-gmail-draft");
+  });
+
+  it.each([
+    {
+      name: "subject",
+      send: { ...SAFE_APPROVED_SEND, subject: "Re: Different approved-looking subject" },
+    },
+    {
+      name: "body",
+      send: { ...SAFE_APPROVED_SEND, body: "不同但仍在 policy 長度內的正文" },
+    },
+    {
+      name: "recipient",
+      send: { ...SAFE_APPROVED_SEND, to: "other-owner@example.com" },
+    },
+    {
+      name: "original message id",
+      send: { ...SAFE_APPROVED_SEND, reply_message_id: "another-valid-message-id" },
+    },
+  ])("declines when the connector mutates the displayed $name", async ({ send }) => {
+    const { elicitationResponses, reply } = await runApprovalBridgeScenario({
+      approvalParams: gmailApprovalParams(send),
+      policyOverrides:
+        send.to === "other-owner@example.com"
+          ? { allowedSenders: [TEST_POLICY_OWNER, "other-owner@example.com"] }
+          : undefined,
+      toolItem: null,
+    });
+
+    expect(elicitationResponses).toEqual([
+      {
+        id: 9_101,
+        result: { action: "decline", content: null, _meta: null },
+      },
+    ]);
+    expect(reply.text).toContain(UNVERIFIED_GMAIL_SEND_TEXT);
+  });
+
+  it.each([
+    {
+      name: "profile evidence is missing",
+      scenario: { profileToolItem: null },
+    },
+    {
+      name: "profile mailbox differs",
+      scenario: {
+        profileToolItem: gmailProfileToolItem({
+          result: {
+            content: [],
+            structuredContent: { email: "other@gmail.com" },
+            _meta: null,
+          },
+        }),
+      },
+    },
+    {
+      name: "profile connector differs",
+      scenario: {
+        profileToolItem: gmailProfileToolItem({
+          appContext: { connectorId: "other-connector" },
+        }),
+      },
+    },
+    {
+      name: "profile arguments are not empty",
+      scenario: { profileToolItem: gmailProfileToolItem({ arguments: { unsafe: true } }) },
+    },
+    {
+      name: "original message evidence is missing",
+      scenario: { readThreadToolItem: null },
+    },
+    {
+      name: "profile and read use different connector links",
+      scenario: {
+        readThreadToolItem: gmailReadThreadToolItem({
+          appContext: { linkId: "another-gmail-link" },
+        }),
+      },
+    },
+    {
+      name: "original message sender differs",
+      scenario: {
+        readThreadToolItem: gmailReadThreadToolItemWithMessage({
+          from_: "Attacker <attacker@example.com>",
+        }),
+      },
+    },
+    {
+      name: "original message mailbox recipient differs",
+      scenario: {
+        readThreadToolItem: gmailReadThreadToolItemWithMessage({
+          to: ["Other <other@gmail.com>"],
+        }),
+      },
+    },
+    {
+      name: "original message id differs",
+      scenario: {
+        readThreadToolItem: gmailReadThreadToolItemWithMessage({
+          id: "another-valid-message-id",
+        }),
+      },
+    },
+    {
+      name: "read lookup does not identify a message",
+      scenario: {
+        readThreadToolItem: gmailReadThreadToolItem({
+          arguments: {
+            id: SAFE_APPROVED_SEND.reply_message_id,
+            id_type: "thread",
+            max_messages: 3,
+          },
+        }),
+      },
+    },
+    {
+      name: "read lookup contains an extra argument",
+      scenario: {
+        readThreadToolItem: gmailReadThreadToolItem({
+          arguments: {
+            id: SAFE_APPROVED_SEND.reply_message_id,
+            id_type: "message",
+            max_messages: 3,
+            include_spam: true,
+          },
+        }),
+      },
+    },
+  ])("declines approval when $name", async ({ scenario }) => {
+    const { elicitationResponses, reply } = await runApprovalBridgeScenario({
+      ...scenario,
+      toolItem: null,
+    });
+
+    expect(elicitationResponses).toEqual([
+      {
+        id: 9_101,
+        result: { action: "decline", content: null, _meta: null },
+      },
+    ]);
+    expect(reply.text).toContain(UNVERIFIED_GMAIL_SEND_TEXT);
+  });
+
+  it.each([
+    {
+      name: "the chat confirmation is not exact",
+      scenario: () => ({ approvalText: "可以" }),
+      expectWarning: false,
+    },
+    {
+      name: "the external thread differs",
+      scenario: () => ({ approvalExternalThreadId: "another-browser-thread" }),
+      expectWarning: false,
+      expectElicitation: false,
+    },
+    {
+      name: "the owner-only policy is disabled",
+      scenario: () => ({ policyOverrides: { enabled: false } }),
+      expectWarning: false,
+      expectElicitation: false,
+    },
+    {
+      name: "the policy mode is not owner_only",
+      scenario: () => ({ policyOverrides: { mode: "manual" } }),
+      expectWarning: false,
+      expectElicitation: false,
+    },
+    {
+      name: "the policy body limit exceeds the supported safety cap",
+      scenario: () => ({ policyOverrides: { maxBodyCharacters: 2_001 } }),
+      expectWarning: false,
+      expectElicitation: false,
+    },
+    {
+      name: "the native thread id differs",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith({ threadId: "foreign-native-thread" }),
+      }),
+    },
+    {
+      name: "the native turn id differs",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith({ turnId: "foreign-turn" }),
+      }),
+    },
+    {
+      name: "the connector id differs",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith({}, { connector_id: "other-connector" }),
+      }),
+    },
+    {
+      name: "the request is not from codex_apps",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith({ serverName: "other_mcp" }),
+      }),
+    },
+    {
+      name: "the request is not a form",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith({ mode: "url" }),
+      }),
+    },
+    {
+      name: "the requested schema is not the empty object schema",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith({
+          requestedSchema: {
+            type: "object",
+            properties: { approve: { type: "boolean" } },
+          },
+        }),
+      }),
+    },
+    {
+      name: "the MCP approval metadata is incomplete",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith(
+          {},
+          { codex_approval_kind: "generic", source: "other" },
+        ),
+      }),
+    },
+    {
+      name: "the connector or tool display identity differs",
+      scenario: () => ({
+        approvalParams: gmailApprovalParamsWith(
+          {},
+          { connector_name: "Not Gmail", tool_title: "draft_email" },
+        ),
+      }),
+    },
+    {
+      name: "tool_params_display contains an extra field",
+      scenario: () => {
+        const params = gmailApprovalParamsWith();
+        const meta = params._meta as Record<string, unknown>;
+        meta.tool_params_display = [
+          ...((meta.tool_params_display as unknown[]) ?? []),
+          { name: "cc", value: "attacker@example.com" },
+        ];
+        return { approvalParams: params };
+      },
+    },
+    {
+      name: "the recipient is not allowlisted by policy",
+      scenario: () => ({
+        approvalParams: gmailApprovalParams({
+          ...SAFE_APPROVED_SEND,
+          to: "stranger@example.com",
+        }),
+      }),
+    },
+    {
+      name: "the body exceeds the policy limit",
+      scenario: () => ({
+        policyOverrides: { maxBodyCharacters: 5 },
+      }),
+      expectWarning: false,
+      expectElicitation: false,
+    },
+    {
+      name: "the content type is not text/plain",
+      scenario: () => ({
+        approvalParams: gmailApprovalParams({
+          ...SAFE_APPROVED_SEND,
+          content_type: "text/html",
+        }),
+      }),
+    },
+    {
+      name: "the reply message id is invalid",
+      scenario: () => ({
+        approvalParams: gmailApprovalParams({
+          ...SAFE_APPROVED_SEND,
+          reply_message_id: "bad id\nsecond-header",
+        }),
+      }),
+    },
+    {
+      name: "the subject contains CRLF header injection",
+      scenario: () => ({
+        approvalParams: gmailApprovalParams({
+          ...SAFE_APPROVED_SEND,
+          subject: "Hello\r\nBcc: attacker@example.com",
+        }),
+      }),
+    },
+    {
+      name: "the body contains a control character",
+      scenario: () => ({
+        approvalParams: gmailApprovalParams({
+          ...SAFE_APPROVED_SEND,
+          body: "hello\u0000world",
+        }),
+      }),
+    },
+  ])("declines Gmail approval when $name", async ({
+    scenario,
+    expectWarning = true,
+    expectElicitation = true,
+  }) => {
+    const { reply, elicitationResponses } = await runApprovalBridgeScenario({
+      ...scenario(),
+      toolItem: null,
+    });
+
+    expect(elicitationResponses).toEqual(
+      expectElicitation
+        ? [
+            {
+              id: 9_101,
+              result: { action: "decline", content: null, _meta: null },
+            },
+          ]
+        : [],
+    );
+    if (expectWarning) expect(reply.text).toContain(UNVERIFIED_GMAIL_SEND_TEXT);
+  });
+
+  it.each([
+    {
+      name: "there is no completed tool item",
+      scenario: () => ({ toolItem: null }),
+    },
+    {
+      name: "the notification native thread differs",
+      scenario: () => ({ toolNotificationThreadId: "foreign-native-thread" }),
+    },
+    {
+      name: "the notification turn differs",
+      scenario: () => ({ toolNotificationTurnId: "foreign-turn" }),
+    },
+    {
+      name: "the MCP server differs",
+      scenario: () => ({ toolItem: gmailSendToolItem({ server: "other_mcp" }) }),
+    },
+    {
+      name: "the exact tool differs",
+      scenario: () => ({ toolItem: gmailSendToolItem({ tool: "prepare_send_email" }) }),
+    },
+    {
+      name: "the exact action differs",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          appContext: { actionName: "draft_send_email" },
+        }),
+      }),
+    },
+    {
+      name: "the connector differs",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          appContext: { connectorId: "other-connector" },
+        }),
+      }),
+    },
+    {
+      name: "the verified Gmail link differs",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          appContext: { linkId: "another-gmail-link" },
+        }),
+      }),
+    },
+    {
+      name: "the recipient arguments differ",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          arguments: { ...SAFE_APPROVED_SEND, to: "stranger@example.com" },
+        }),
+      }),
+    },
+    {
+      name: "the subject arguments differ",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          arguments: { ...SAFE_APPROVED_SEND, subject: "Different subject" },
+        }),
+      }),
+    },
+    {
+      name: "the body arguments differ",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          arguments: { ...SAFE_APPROVED_SEND, body: "Different body" },
+        }),
+      }),
+    },
+    {
+      name: "the reply message id arguments differ",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({
+          arguments: { ...SAFE_APPROVED_SEND, reply_message_id: "other-message" },
+        }),
+      }),
+    },
+    {
+      name: "the result is missing",
+      scenario: () => ({ toolItem: gmailSendToolItem({ result: null }) }),
+    },
+    {
+      name: "the completed item contains an error",
+      scenario: () => ({
+        toolItem: gmailSendToolItem({ error: { message: "send failed" } }),
+      }),
+    },
+  ])("does not preserve a Gmail success claim when $name", async ({ scenario }) => {
+    const { reply, elicitationResponses } = await runApprovalBridgeScenario(scenario());
+
+    expect(elicitationResponses[0]).toEqual({
+      id: 9_101,
+      result: { action: "accept", content: null, _meta: null },
+    });
+    expect(reply.text).toContain(UNVERIFIED_GMAIL_SEND_TEXT);
+    expect(reply.text).not.toBe("已成功寄出郵件。");
+  });
+
+  it.each([
+    {
+      name: "Codex-tagged MCP tool approval",
+      params: {
+        threadId: "native-thread",
+        turnId: "elicitation-turn",
+        serverName: "codex_apps",
+        mode: "form",
+        message: "Allow Gmail to send this email?",
+        _meta: {
+          codex_approval_kind: "mcp_tool_call",
+          source: "connector",
+          connector_id: "connector_2128aebfecb84f64a069897515042a44",
+        },
+        requestedSchema: { type: "object", properties: {} },
+      },
+    },
+    {
+      name: "unsupported generic elicitation",
+      params: {
+        threadId: "native-thread",
+        turnId: "elicitation-turn",
+        serverName: "unknown_mcp",
+        mode: "form",
+        message: "Choose a template",
+        _meta: {},
+        requestedSchema: {
+          type: "object",
+          properties: {
+            template: { type: "string", enum: ["simple", "fancy"] },
+          },
+        },
+      },
+    },
+  ])("does not even start $name without a displayed pending draft", async ({ params }) => {
+    const serverRequestId = 9_001;
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake)) return;
+      if (message.method === "turn/start") {
+        fake.send({
+          id: message.id,
+          result: { turn: { id: "elicitation-turn", status: "inProgress" } },
+        });
+        fake.send({
+          id: serverRequestId,
+          method: "mcpServer/elicitation/request",
+          params,
+        });
+        return;
+      }
+      if (message.id === serverRequestId && message.method === undefined) {
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "elicitation-turn",
+            item: {
+              type: "agentMessage",
+              id: "elicitation-message",
+              text: "尚未寄出。",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: { id: "elicitation-turn", status: "completed", items: [] },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    await expect(
+      runtime.respond(colleague, [], turn("確認寄出")),
+    ).resolves.toEqual({
+      text: expect.stringContaining(
+        "目前沒有一份已顯示且等待核准的 Gmail 草稿",
+      ),
+    });
+    const response = server.messages.find(
+      (message) => message.id === serverRequestId && message.method === undefined,
+    );
+    expect(response).toBeUndefined();
+    expect(server.messages.filter((message) => message.method === "turn/start")).toHaveLength(
+      0,
+    );
+    expect(params).toBeDefined();
+    await runtime.close();
+  });
+
+  it.each([
+    { name: "missing tool evidence", toolItem: undefined },
+    {
+      name: "failed Gmail tool evidence",
+      toolItem: {
+        type: "mcpToolCall",
+        id: "gmail-send-tool",
+        server: "codex_apps",
+        tool: "send_email",
+        status: "failed",
+        arguments: { to: "alice@example.com" },
+        appContext: {
+          connectorId: "connector_2128aebfecb84f64a069897515042a44",
+          linkId: null,
+          resourceUri: null,
+          appName: "Gmail",
+          templateId: null,
+          actionName: "send_email",
+        },
+        pluginId: "gmail@openai-curated",
+        result: null,
+        error: { message: "send failed" },
+        durationMs: 12,
+      },
+    },
+    {
+      name: "completed evidence from another connector",
+      toolItem: {
+        type: "mcpToolCall",
+        id: "wrong-connector-tool",
+        server: "codex_apps",
+        tool: "send_email",
+        status: "completed",
+        arguments: { to: "alice@example.com" },
+        appContext: {
+          connectorId: "connector_not_selected_for_this_turn",
+          linkId: null,
+          resourceUri: null,
+          appName: "Gmail",
+          templateId: null,
+          actionName: "send_email",
+        },
+        pluginId: "gmail@openai-curated",
+        result: { content: [], structuredContent: null, _meta: null },
+        error: null,
+        durationMs: 12,
+      },
+    },
+    {
+      name: "completed non-send action containing the word send",
+      toolItem: {
+        type: "mcpToolCall",
+        id: "gmail-send-settings-tool",
+        server: "codex_apps",
+        tool: "get_send_settings",
+        status: "completed",
+        arguments: {},
+        appContext: {
+          connectorId: "connector_2128aebfecb84f64a069897515042a44",
+          linkId: null,
+          resourceUri: null,
+          appName: "Gmail",
+          templateId: null,
+          actionName: "get_send_settings",
+        },
+        pluginId: "gmail@openai-curated",
+        result: { content: [], structuredContent: null, _meta: null },
+        error: null,
+        durationMs: 12,
+      },
+    },
+    {
+      name: "completed status with an error payload",
+      toolItem: {
+        type: "mcpToolCall",
+        id: "inconsistent-gmail-send-tool",
+        server: "codex_apps",
+        tool: "send_email",
+        status: "completed",
+        arguments: { to: "alice@example.com" },
+        appContext: {
+          connectorId: "connector_2128aebfecb84f64a069897515042a44",
+          linkId: null,
+          resourceUri: null,
+          appName: "Gmail",
+          templateId: null,
+          actionName: "send_email",
+        },
+        pluginId: "gmail@openai-curated",
+        result: null,
+        error: { message: "inconsistent completion" },
+        durationMs: 12,
+      },
+    },
+  ])("fails closed on a claimed Gmail send with $name", async ({ toolItem }) => {
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake, true)) return;
+      if (message.method === "turn/start") {
+        fake.send({
+          id: message.id,
+          result: { turn: { id: "gmail-send-turn", status: "inProgress" } },
+        });
+        if (toolItem) {
+          fake.send({
+            method: "item/completed",
+            params: {
+              threadId: "native-thread",
+              turnId: "gmail-send-turn",
+              item: toolItem,
+            },
+          });
+        }
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "gmail-send-turn",
+            item: {
+              type: "agentMessage",
+              id: "gmail-send-message",
+              text: "已成功寄出郵件。",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: { id: "gmail-send-turn", status: "completed", items: [] },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    const reply = await runtime.respond(
+      colleague,
+      [],
+      turn("請用 Gmail 寄信給 alice@example.com，主旨是測試。"),
+    );
+    expect(reply.text).toContain(UNVERIFIED_GMAIL_SEND_TEXT);
+    await runtime.close();
+  });
+
+  it("does not preserve tool success without matching accepted approval metadata", async () => {
+    const server = new FakeAppServer((message, fake) => {
+      if (replyToHandshakeAndThread(message, fake, true)) return;
+      if (message.method === "turn/start") {
+        fake.send({
+          id: message.id,
+          result: { turn: { id: "verified-send-turn", status: "inProgress" } },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "verified-send-turn",
+            item: {
+              type: "mcpToolCall",
+              id: "verified-gmail-send-tool",
+              server: "codex_apps",
+              tool: "send_email",
+              status: "completed",
+              arguments: { to: "alice@example.com" },
+              appContext: {
+                connectorId: "connector_2128aebfecb84f64a069897515042a44",
+                linkId: null,
+                resourceUri: null,
+                appName: "Gmail",
+                templateId: null,
+                actionName: "send_email",
+              },
+              pluginId: "gmail@openai-curated",
+              result: { content: [], structuredContent: null, _meta: null },
+              error: null,
+              durationMs: 10,
+            },
+          },
+        });
+        fake.send({
+          method: "item/completed",
+          params: {
+            threadId: "native-thread",
+            turnId: "verified-send-turn",
+            item: {
+              type: "agentMessage",
+              id: "verified-send-message",
+              text: "已成功寄出郵件。",
+              phase: "final_answer",
+            },
+          },
+        });
+        fake.send({
+          method: "turn/completed",
+          params: {
+            threadId: "native-thread",
+            turn: { id: "verified-send-turn", status: "completed", items: [] },
+          },
+        });
+      }
+    });
+    const runtime = new CodexAppServerRuntime({
+      startProcess: () => server,
+      timeoutMs: 250,
+    });
+
+    const reply = await runtime.respond(
+      colleague,
+      [],
+      turn("請用 Gmail 寄信給 alice@example.com，主旨是測試。"),
+    );
+    expect(reply.text).toContain(UNVERIFIED_GMAIL_SEND_TEXT);
     await runtime.close();
   });
 

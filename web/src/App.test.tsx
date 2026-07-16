@@ -1,7 +1,16 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -75,6 +84,11 @@ describe("digital colleague chat", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    if (originalScrollIntoView) {
+      HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+    } else {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
     sessionStorage.clear();
   });
 
@@ -302,7 +316,9 @@ describe("digital colleague chat", () => {
     await user.type(screen.getByLabelText("傳訊息給 Ada"), "Hold this turn");
     await user.click(screen.getByRole("button", { name: "送出訊息" }));
 
-    expect(screen.getByText("Ada 正在思考…")).toBeInTheDocument();
+    expect(screen.getByText("Ada 處理中")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ada 正在處理")).toBeInTheDocument();
+    expect(screen.getByText("在線 · 正在處理")).toBeInTheDocument();
     expect(screen.getByText("正在處理你的需求")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "送出訊息" })).toBeDisabled();
     resolveTurn(
@@ -314,6 +330,10 @@ describe("digital colleague chat", () => {
       }),
     );
     expect(await screen.findByText("Finished")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Ada 已就緒")).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText("Ada 正在處理")).not.toBeInTheDocument();
   });
 
   it("keeps a failed message visible and explains that it can be retried", async () => {
@@ -349,7 +369,9 @@ describe("digital colleague chat", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a proactive event without waiting for a user message", async () => {
+  it("adds a proactive event to Ada's timeline and lets notification links focus it", async () => {
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     const user = userEvent.setup();
     render(<App />);
     const source = FakeEventSource.instances[0];
@@ -364,15 +386,27 @@ describe("digital colleague chat", () => {
       occurredAt: "2026-07-15T13:00:00.000Z",
     });
 
-    expect(await screen.findByText("新信件需要你確認")).toBeInTheDocument();
+    const task = await screen.findByRole("article", {
+      name: "新信件需要你確認",
+    });
+    expect(within(task).getByText("Gmail")).toBeInTheDocument();
+    expect(within(task).getByText("已收到")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "在對話中查看：新信件需要你確認" }),
+    );
+    expect(task).toHaveFocus();
+    expect(scrollIntoView).toHaveBeenCalled();
+
     const bell = screen.getByRole("button", { name: "通知，1 則未讀" });
     await user.click(bell);
-    expect(screen.getAllByText("客戶詢問合約版本")).toHaveLength(2);
-
-    await user.click(screen.getByRole("button", { name: "交給 Ada" }));
-    expect(
-      (screen.getByLabelText("傳訊息給 Ada") as HTMLTextAreaElement).value,
-    ).toContain("新信件需要你確認");
+    await user.click(
+      screen.getByRole("button", {
+        name: "查看 Gmail 工作：新信件需要你確認",
+      }),
+    );
+    expect(task).toHaveFocus();
+    expect(screen.getByLabelText("傳訊息給 Ada")).toHaveValue("");
   });
 
   it("does not show a duplicate proactive event twice", async () => {
@@ -392,6 +426,233 @@ describe("digital colleague chat", () => {
     expect(
       await screen.findByRole("button", { name: "通知，1 則未讀" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("article", { name: "同一封信" }),
+    ).toHaveLength(1);
+  });
+
+  it("merges phase events for the same task into one current timeline card", async () => {
+    render(<App />);
+    const source = FakeEventSource.instances[0];
+
+    source.emit("notification", {
+      eventId: "gmail-phase-received",
+      taskId: "gmail-task-42",
+      source: "gmail",
+      type: "message.created",
+      phase: "received",
+      replyPolicy: "approval_required",
+      title: "需要回覆的客戶郵件",
+      summary: "Ada 會先準備安全摘要",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+    });
+    source.emit("notification", {
+      eventId: "gmail-phase-approval",
+      taskId: "gmail-task-42",
+      source: "gmail",
+      type: "draft.ready",
+      phase: "awaiting_approval",
+      replyPolicy: "approval_required",
+      title: "需要回覆的客戶郵件",
+      summary: "草稿已準備，等待你在對話中審閱",
+      occurredAt: "2026-07-15T13:01:00.000Z",
+    });
+
+    const cards = await screen.findAllByRole("article", {
+      name: "需要回覆的客戶郵件",
+    });
+    expect(cards).toHaveLength(1);
+    expect(within(cards[0]).getByText("等待核准")).toBeInTheDocument();
+    expect(within(cards[0]).getByText("每次回覆都要核准")).toBeInTheDocument();
+
+    await userEvent.setup().click(
+      screen.getByRole("button", { name: "通知，2 則未讀" }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "在 Ada 對話中審閱：需要回覆的客戶郵件",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("sends a bounded stop request and keeps its accepted event deduplicated from SSE", async () => {
+    let resolveCancel!: (response: Response) => void;
+    const cancelResponse = new Promise<Response>((resolve) => {
+      resolveCancel = resolve;
+    });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/health")) {
+        return jsonResponse({
+          data: {
+            status: "ok",
+            runtime: "codex-app-server",
+            colleague: { id: "ada", name: "Ada" },
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/events")) return jsonResponse({ data: [] });
+      if (url.endsWith("/api/v1/runtime/account")) {
+        return jsonResponse({
+          data: {
+            available: true,
+            requiresOpenaiAuth: true,
+            account: { type: "chatgpt", email: "ada@example.com" },
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/tasks/gmail-task-42/cancel")) {
+        expect(init?.method).toBe("POST");
+        expect(init?.headers).toEqual({
+          accept: "application/json",
+          "content-type": "application/json",
+        });
+        expect(JSON.parse(String(init?.body))).toEqual({});
+        return cancelResponse;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    const source = FakeEventSource.instances[0];
+    source.emit("notification", {
+      eventId: "gmail-phase-triaging",
+      taskId: "gmail-task-42",
+      source: "gmail",
+      type: "message.created",
+      phase: "triaging",
+      replyPolicy: "approval_required",
+      title: "可以中止的郵件任務",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+    });
+
+    const card = await screen.findByRole("article", { name: "可以中止的郵件任務" });
+    await user.click(within(card).getByRole("button", { name: "停止" }));
+    expect(within(card).getByRole("button", { name: "停止中…" })).toBeDisabled();
+
+    const cancelledEvent = {
+      eventId: "gmail-phase-cancelled",
+      taskId: "gmail-task-42",
+      source: "gmail",
+      type: "task.cancelled",
+      phase: "cancelled",
+      replyPolicy: "none",
+      title: "可以中止的郵件任務",
+      occurredAt: "2026-07-15T13:01:00.000Z",
+    };
+    resolveCancel(
+      jsonResponse(
+        {
+          data: cancelledEvent,
+        },
+        202,
+      ),
+    );
+
+    expect(await within(card).findByText("已停止")).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "停止" })).not.toBeInTheDocument();
+    source.emit("notification", cancelledEvent);
+    expect(screen.getAllByRole("article", { name: "可以中止的郵件任務" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "通知，1 則未讀" })).toBeInTheDocument();
+  });
+
+  it("keeps stop available and warns when the server cannot cancel the task", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/health")) {
+        return jsonResponse({
+          data: {
+            status: "ok",
+            runtime: "codex-app-server",
+            colleague: { id: "ada", name: "Ada" },
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/events")) return jsonResponse({ data: [] });
+      if (url.endsWith("/api/v1/runtime/account")) {
+        return jsonResponse({
+          data: {
+            available: true,
+            requiresOpenaiAuth: true,
+            account: { type: "chatgpt", email: "ada@example.com" },
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/tasks/gmail-task-42/cancel")) {
+        return jsonResponse(
+          { error: { code: "TASK_TERMINAL", message: "Task cannot be cancelled." } },
+          409,
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    FakeEventSource.instances[0].emit("notification", {
+      eventId: "gmail-phase-sending",
+      taskId: "gmail-task-42",
+      source: "gmail",
+      type: "message.sending",
+      phase: "sending",
+      title: "可能已開始寄送的任務",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+    });
+
+    const card = await screen.findByRole("article", { name: "可能已開始寄送的任務" });
+    expect(within(card).getByText("已開始寄送，停止可能來不及")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "停止" }));
+
+    expect(await within(card).findByRole("alert")).toHaveTextContent(
+      "目前無法停止，任務可能仍在進行。",
+    );
+    expect(within(card).getByRole("button", { name: "停止" })).toBeEnabled();
+  });
+
+  it("replays an event into one task card without a toast or unread badge", async () => {
+    const replayedEvent = {
+      eventId: "gmail-event-replayed",
+      source: "gmail",
+      type: "message.created",
+      title: "重播的郵件工作",
+      summary: "只應顯示一次",
+      occurredAt: "2026-07-15T13:00:00.000Z",
+    };
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith("/api/v1/health")) {
+        return jsonResponse({
+          data: {
+            status: "ok",
+            runtime: "codex-app-server",
+            colleague: { id: "ada", name: "Ada" },
+          },
+        });
+      }
+      if (String(input).endsWith("/api/v1/events")) {
+        return jsonResponse({ data: [replayedEvent] });
+      }
+      if (String(input).endsWith("/api/v1/runtime/account")) {
+        return jsonResponse({
+          data: {
+            available: true,
+            requiresOpenaiAuth: true,
+            account: { type: "chatgpt", email: "ada@example.com" },
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    render(<App />);
+
+    await screen.findByRole("article", { name: "重播的郵件工作" });
+    FakeEventSource.instances[0].emit("notification", replayedEvent);
+
+    expect(
+      screen.getAllByRole("article", { name: "重播的郵件工作" }),
+    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "通知" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "在對話中查看：重播的郵件工作" }),
+    ).not.toBeInTheDocument();
   });
 
   it("recreates the proactive event stream after a connection error", async () => {

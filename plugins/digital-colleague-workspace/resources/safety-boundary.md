@@ -2,14 +2,17 @@
 
 ## Scheduled or background runs
 
-A scheduled or otherwise unattended run is read-only at provider boundaries.
-It may read a bounded set of authorized records, summarize them, and draft text
-inside its result. It must not create a provider-side draft or perform any
-other connector write.
+A scheduled or otherwise unattended run is read-only at provider boundaries by
+default. A deployment may grant one narrower standing-order exception only
+when a reviewed machine policy and an independent deterministic guard both
+enforce the exact account, allowlisted counterparty, action, idempotency, and
+cancellation boundary. Prompt instructions alone never create this exception.
+It must not create a provider-side draft or perform any other connector write.
 
 In particular, it must not:
 
-- send, reply, delete, archive, move, mark read or unread, label, categorize,
+- send, reply (except the guarded standing-order case above), delete, archive,
+  move, mark read or unread, label, categorize,
   or create a provider-side email draft;
 - create, update, delete, accept, decline, tentatively accept, or invite anyone
   to a calendar event;

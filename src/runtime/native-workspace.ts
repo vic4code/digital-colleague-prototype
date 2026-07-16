@@ -211,7 +211,7 @@ function requestedSpecs(text: string): ConnectorSpec[] {
     );
   const outlook = /\boutlook\b/i.test(text);
   const email =
-    /(?<!@)\bgmail\b|\be-?mail\b|\binbox\b|郵件|信件|信箱|收信|寄信|回信|哪些信|封信|待回覆/i.test(
+    /(?<!@)\bgmail\b|\be-?mail\b|\binbox\b|郵件|信件|信箱|收信|寄信|回信|哪些信|封信|待回覆|(?:回|回覆|回應|答覆).{0,24}的信/i.test(
       text,
     );
   const calendar =

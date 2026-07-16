@@ -18,14 +18,23 @@ services:
       OPENCLAW_WORKSPACE_DIR: /workspace/colleagues/ada
       OPENCLAW_ADA_WORKSPACE: /workspace/colleagues/ada
       DIGITAL_COLLEAGUE_REPO_ROOT: /workspace
+      ADA_EVENT_API_URL: ${ADA_EVENT_API_URL:-http://host.docker.internal:8787/api/v1/events}
+      DC_EVENT_INGRESS_TOKEN: ${DC_EVENT_INGRESS_TOKEN}
+      GOG_HOME: /home/node/.gogcli
+      GOG_KEYRING_BACKEND: file
+      GOG_KEYRING_PASSWORD: ${GOG_KEYRING_PASSWORD}
       OPENCLAW_DISABLE_BONJOUR: "1"
       NPM_CONFIG_CACHE: /home/node/.openclaw/npm-cache
       TZ: Asia/Taipei
     volumes:
       - ${OPENCLAW_HOST_STATE_DIR:-../../.state/openclaw}:/home/node/.openclaw
       - ${OPENCLAW_HOST_AUTH_SECRET_DIR:-../../.state/openclaw-home/.config/openclaw}:/home/node/.config/openclaw
+      - ${GOG_HOST_STATE_DIR:-../../.state/gogcli}:/home/node/.gogcli
       - ../../colleagues/ada:/workspace/colleagues/ada:ro
+      - ./ada-email-automation:/workspace/deploy/openclaw/ada-email-automation:ro
       - ../../plugins/digital-colleague-workspace/resources/safety-boundary.md:/workspace/plugins/digital-colleague-workspace/resources/safety-boundary.md:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - 127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}:18789
       - 127.0.0.1:${OPENCLAW_INGRESS_PORT:-18890}:18890
@@ -74,14 +83,23 @@ services:
       OPENCLAW_WORKSPACE_DIR: /workspace/colleagues/ada
       OPENCLAW_ADA_WORKSPACE: /workspace/colleagues/ada
       DIGITAL_COLLEAGUE_REPO_ROOT: /workspace
+      ADA_EVENT_API_URL: ${ADA_EVENT_API_URL:-http://host.docker.internal:8787/api/v1/events}
+      DC_EVENT_INGRESS_TOKEN: ${DC_EVENT_INGRESS_TOKEN}
+      GOG_HOME: /home/node/.gogcli
+      GOG_KEYRING_BACKEND: file
+      GOG_KEYRING_PASSWORD: ${GOG_KEYRING_PASSWORD}
       OPENCLAW_DISABLE_BONJOUR: "1"
       NPM_CONFIG_CACHE: /home/node/.openclaw/npm-cache
       TZ: Asia/Taipei
     volumes:
       - ${OPENCLAW_HOST_STATE_DIR:-../../.state/openclaw}:/home/node/.openclaw
       - ${OPENCLAW_HOST_AUTH_SECRET_DIR:-../../.state/openclaw-home/.config/openclaw}:/home/node/.config/openclaw
+      - ${GOG_HOST_STATE_DIR:-../../.state/gogcli}:/home/node/.gogcli
       - ../../colleagues/ada:/workspace/colleagues/ada:ro
+      - ./ada-email-automation:/workspace/deploy/openclaw/ada-email-automation:ro
       - ../../plugins/digital-colleague-workspace/resources/safety-boundary.md:/workspace/plugins/digital-colleague-workspace/resources/safety-boundary.md:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     cap_drop:
       - NET_RAW
       - NET_ADMIN

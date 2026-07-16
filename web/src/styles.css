@@ -113,6 +113,14 @@ textarea:focus-visible {
 .activity-card.available .activity-light {
   background: var(--accent);
 }
+.runtime-pill.working {
+  color: var(--warning);
+  font-weight: 650;
+}
+.runtime-pill.working > span {
+  background: var(--warning);
+  animation: pulse 1.4s ease-in-out infinite;
+}
 .runtime-pill.offline,
 .presence.offline { color: var(--danger); }
 .runtime-pill.offline > span,
@@ -490,6 +498,20 @@ textarea:focus-visible {
 .message-content ul { margin: 0; padding-left: 1.2rem; }
 .message-content li + li { margin-top: 6px; }
 .message-content li::marker { color: var(--accent); }
+.message-content pre {
+  max-width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f5f8f6;
+  color: #20312b;
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .message-link {
   color: var(--accent);
   font-weight: 600;
@@ -504,6 +526,130 @@ textarea:focus-visible {
   letter-spacing: -0.035em;
   line-height: 1.28;
 }
+
+.task-message-row .email-task-card {
+  --task-source: var(--accent);
+  --task-source-soft: var(--accent-soft);
+  width: min(680px, calc(100% - 42px));
+}
+.email-task-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px 14px 14px 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(32, 58, 48, 0.06);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.email-task-card:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(23, 107, 82, 0.12), 0 6px 18px rgba(32, 58, 48, 0.06);
+}
+.email-task-card.source-gmail { --task-source: #b3261e; --task-source-soft: #fbeceb; }
+.email-task-card.source-outlook { --task-source: #0a64ad; --task-source-soft: #eaf3fa; }
+.email-task-card.source-teams { --task-source: #565aa7; --task-source-soft: #efeffa; }
+.email-task-card.source-notion { --task-source: #2f3437; --task-source-soft: #ecefef; }
+.email-task-header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.email-task-source-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--task-source-soft);
+  color: var(--task-source);
+  font-size: 18px;
+}
+.email-task-source-copy { display: grid; min-width: 0; gap: 1px; }
+.email-task-source-copy strong { color: var(--text); font-size: 12px; font-weight: 680; }
+.email-task-source-copy small,
+.email-task-header time { color: var(--muted); font-size: 10px; }
+.email-task-body { margin-top: 12px; }
+.email-task-body h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 680;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.email-task-body p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.email-task-footer {
+  display: grid;
+  gap: 7px;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+}
+.email-task-footer-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.task-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.task-status-triaging,
+.task-status-awaiting-approval,
+.task-status-sending,
+.task-status-cancelling { background: #fff6e8; color: var(--warning); }
+.task-status-cancelled { background: var(--surface-soft); color: var(--muted); }
+.task-status-completed { background: var(--accent-soft); color: var(--accent); }
+.task-status-failed { background: #fbeaec; color: var(--danger); }
+.task-status-spinner { animation: task-spin 1.2s linear infinite; }
+.task-safety-note { color: var(--muted); font-size: 10px; text-align: right; }
+.task-cancel-button.ant-btn { min-width: 68px; font-size: 11px; }
+.task-cancel-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.thinking-message-row { align-items: center; }
+.thinking-bubble {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px 12px 12px 12px;
+  background: var(--surface-soft);
+}
+.thinking-bubble > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--warning);
+  animation: thinking-dot 1.2s ease-in-out infinite;
+}
+.thinking-bubble > span:nth-child(2) { animation-delay: 120ms; }
+.thinking-bubble > span:nth-child(3) { animation-delay: 240ms; }
+.thinking-bubble small { margin-left: 3px; color: var(--muted); font-size: 11px; }
 
 .starter-actions { width: min(820px, 100%); margin: 0 auto; }
 .starter-heading {
@@ -679,6 +825,11 @@ textarea:focus-visible {
 }
 
 @keyframes pulse { 50% { opacity: 0.35; transform: scale(0.82); } }
+@keyframes task-spin { to { transform: rotate(360deg); } }
+@keyframes thinking-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
 @keyframes colleague-idle {
   0%, 100% { transform: translateX(-50%) translateY(0); }
   50% { transform: translateX(-50%) translateY(-2px); }
@@ -757,6 +908,14 @@ textarea:focus-visible {
   .message-list.is-welcome { justify-content: flex-start; gap: 24px; }
   .message-avatar.ant-avatar { width: 30px; height: 30px; }
   .message-bubble { max-width: 90%; }
+  .task-message-row { gap: 9px; }
+  .task-message-row .email-task-card { width: calc(100% - 39px); padding: 12px; }
+  .email-task-header { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px; }
+  .email-task-source-mark { width: 32px; height: 32px; border-radius: 9px; font-size: 16px; }
+  .email-task-footer-main { grid-template-columns: auto minmax(0, 1fr); gap: 7px; }
+  .task-safety-note { text-align: left; }
+  .task-cancel-button.ant-btn { grid-column: 1 / -1; width: 100%; }
+  .task-cancel-error { text-align: left; }
   .message-list.is-welcome .message-content p { font-size: 24px; }
   .starter-heading { display: block; margin-bottom: 10px; }
   .starter-heading small { display: block; margin-top: 2px; }

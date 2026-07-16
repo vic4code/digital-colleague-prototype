@@ -124,6 +124,14 @@ describe("native workspace connector selection", () => {
     ).toBe("notion");
   });
 
+  it.each([
+    "幫我回 victor 的信，寄出",
+    "回覆 Victor 那封信並寄出",
+    "請答覆 Alice 的郵件",
+  ])("routes a natural-language reply request through Gmail: %s", (text) => {
+    expect(nativeConnectorIntentKey(text)).toBe("gmail");
+  });
+
   it("selects the complete official M365 connector set for a Microsoft 365 brief", () => {
     const text = "幫我做 Microsoft 365 今日工作摘要";
 

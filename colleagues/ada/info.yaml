@@ -30,4 +30,5 @@ permissions:
   - contracts:read
   - contracts:redline
   - board:write
-  - email:draft          # note: draft only — sending needs human approval
+  - email:draft
+  - email:reply:owner    # constrained by policies/email-automation.json

@@ -461,4 +461,82 @@ describe("localhost turn API", () => {
     expect(notification).toContain('"eventId":"gmail-event-1"');
     expect(dispatch).not.toHaveBeenCalled();
   });
+
+  it("lets the local UI cancel one email task and exposes a token-protected send gate", async () => {
+    const eventStore = new ProactiveEventStore();
+    const url = await start(async () => ({ text: "unused" }), {
+      eventIngressToken: "test-ingress-token",
+      eventStore,
+    });
+    const taskEvent = {
+      ...eventPayload,
+      eventId: "gmail-message-1:triaging:run-1",
+      taskId: "gmail-message-1",
+      phase: "triaging",
+      replyPolicy: "approval_required",
+    };
+    await fetch(`${url}/api/v1/events`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-ingress-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(taskEvent),
+    });
+
+    const cancelled = await fetch(
+      `${url}/api/v1/tasks/${encodeURIComponent(taskEvent.taskId)}/cancel`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      },
+    );
+    const unauthorizedGate = await fetch(
+      `${url}/api/v1/tasks/${encodeURIComponent(taskEvent.taskId)}/authorization`,
+    );
+    const gate = await fetch(
+      `${url}/api/v1/tasks/${encodeURIComponent(taskEvent.taskId)}/authorization`,
+      { headers: { authorization: "Bearer test-ingress-token" } },
+    );
+
+    expect(cancelled.status).toBe(202);
+    await expect(cancelled.json()).resolves.toMatchObject({
+      data: {
+        taskId: taskEvent.taskId,
+        phase: "cancelled",
+        replyPolicy: "none",
+      },
+    });
+    expect(unauthorizedGate.status).toBe(401);
+    expect(gate.status).toBe(200);
+    await expect(gate.json()).resolves.toEqual({
+      data: {
+        known: true,
+        allowed: false,
+        cancelled: true,
+        phase: "cancelled",
+      },
+    });
+  });
+
+  it("rejects cancellation for unknown tasks and non-empty request bodies", async () => {
+    const url = await start(async () => ({ text: "unused" }), {
+      eventIngressToken: "test-ingress-token",
+      eventStore: new ProactiveEventStore(),
+    });
+    const unknown = await fetch(`${url}/api/v1/tasks/unknown-task/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    const invalid = await fetch(`${url}/api/v1/tasks/unknown-task/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ force: true }),
+    });
+
+    expect(unknown.status).toBe(404);
+    expect(invalid.status).toBe(422);
+  });
 });

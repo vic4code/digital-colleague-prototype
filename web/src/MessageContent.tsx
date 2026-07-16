@@ -6,7 +6,8 @@ interface MessageContentProps {
 
 type MessageBlock =
   | { type: "paragraph"; lines: string[] }
-  | { type: "list"; items: string[] };
+  | { type: "list"; items: string[] }
+  | { type: "code"; language: string; lines: string[] };
 
 const INLINE_TOKEN = /(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|\*\*[^*\n]+\*\*|https?:\/\/[^\s<]+)/g;
 const MARKDOWN_LINK = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/;
@@ -74,6 +75,7 @@ function messageBlocks(text: string): MessageBlock[] {
   const blocks: MessageBlock[] = [];
   let paragraph: string[] = [];
   let items: string[] = [];
+  let code: Extract<MessageBlock, { type: "code" }> | undefined;
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -87,6 +89,22 @@ function messageBlocks(text: string): MessageBlock[] {
   };
 
   for (const rawLine of text.split(/\r?\n/)) {
+    if (code) {
+      if (rawLine.trim() === "```") {
+        blocks.push(code);
+        code = undefined;
+      } else {
+        code.lines.push(rawLine);
+      }
+      continue;
+    }
+    const fence = rawLine.match(/^```([A-Za-z0-9_-]*)\s*$/);
+    if (fence) {
+      flushParagraph();
+      flushList();
+      code = { type: "code", language: fence[1] ?? "", lines: [] };
+      continue;
+    }
     const line = rawLine.trimEnd();
     const bullet = line.match(/^\s*[-*]\s+(.+)$/);
     if (bullet) {
@@ -104,6 +122,12 @@ function messageBlocks(text: string): MessageBlock[] {
   }
   flushParagraph();
   flushList();
+  if (code) {
+    blocks.push({
+      type: "paragraph",
+      lines: [`\`\`\`${code.language}`, ...code.lines],
+    });
+  }
   return blocks;
 }
 
@@ -111,7 +135,13 @@ export function MessageContent({ text }: MessageContentProps) {
   return (
     <div className="message-content">
       {messageBlocks(text).map((block, blockIndex) =>
-        block.type === "list" ? (
+        block.type === "code" ? (
+          <pre key={`code-${blockIndex}`}>
+            <code data-language={block.language || undefined}>
+              {block.lines.join("\n")}
+            </code>
+          </pre>
+        ) : block.type === "list" ? (
           <ul key={`list-${blockIndex}`}>
             {block.items.map((item, itemIndex) => (
               <li key={`item-${itemIndex}`}>{inlineContent(item)}</li>

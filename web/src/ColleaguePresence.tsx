@@ -34,7 +34,9 @@ export function ColleaguePresence({
 }: ColleaguePresenceProps) {
   const presenceLabel =
     runtimeStatus === "ready"
-      ? "在線 · 可以開始"
+      ? activity.kind === "thinking"
+        ? "在線 · 正在處理"
+        : "在線 · 可以開始"
       : runtimeStatus === "busy"
         ? "在線 · 正在處理其他工作"
         : runtimeStatus === "reconnecting"

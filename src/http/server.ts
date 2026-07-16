@@ -262,6 +262,39 @@ function parseTurnBody(value: unknown): { text: string; threadId: string } {
   return { text, threadId };
 }
 
+function parseTaskRoute(
+  requestUrl: string | undefined,
+): { taskId: string; action: "cancel" | "authorization" } | undefined {
+  if (!requestUrl) return undefined;
+  let pathname: string;
+  try {
+    pathname = new URL(requestUrl, "http://localhost").pathname;
+  } catch {
+    return undefined;
+  }
+  const match = pathname.match(
+    /^\/api\/v1\/tasks\/([^/]+)\/(cancel|authorization)$/,
+  );
+  if (!match) return undefined;
+  let taskId: string;
+  try {
+    taskId = decodeURIComponent(match[1]).trim();
+  } catch {
+    return undefined;
+  }
+  if (
+    taskId.length < 1 ||
+    taskId.length > 200 ||
+    /[\u0000-\u001f\u007f/\\]/.test(taskId)
+  ) {
+    return undefined;
+  }
+  return {
+    taskId,
+    action: match[2] as "cancel" | "authorization",
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -303,6 +336,7 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
     const requestId = randomUUID();
     response.setHeader("x-request-id", requestId);
     try {
+      const taskRoute = parseTaskRoute(request.url);
       if (request.method === "GET" && request.url === "/api/v1/health") {
         sendJson(response, 200, {
           data: {
@@ -411,6 +445,61 @@ export function createTurnServer(options: TurnServerOptions): TurnServer {
             durationMs: Math.round(performance.now() - startedAt),
           }),
         );
+        return;
+      }
+
+      if (
+        request.method === "GET" &&
+        taskRoute?.action === "authorization"
+      ) {
+        if (!eventIngressToken) {
+          sendError(
+            response,
+            503,
+            "EVENT_INGRESS_DISABLED",
+            "Task authorization is not configured.",
+          );
+          return;
+        }
+        if (!tokenMatches(bearerToken(request), eventIngressToken)) {
+          sendError(response, 401, "UNAUTHORIZED", "Event token is invalid.");
+          return;
+        }
+        sendJson(response, 200, {
+          data: eventStore.taskAuthorization(taskRoute.taskId),
+        });
+        return;
+      }
+
+      if (request.method === "POST" && taskRoute?.action === "cancel") {
+        if (!isAllowedOrigin(request)) {
+          sendError(response, 403, "ORIGIN_FORBIDDEN", "Browser origin is not allowed.");
+          return;
+        }
+        const contentType = request.headers["content-type"] ?? "";
+        if (!contentType.toLowerCase().startsWith("application/json")) {
+          sendError(response, 415, "JSON_REQUIRED", "Content-Type must be application/json.");
+          return;
+        }
+        const body = await readJson(request);
+        if (!isRecord(body) || Object.keys(body).length > 0) {
+          sendError(response, 422, "INVALID_CANCEL", "Cancel body must be an empty object.");
+          return;
+        }
+        const authorization = eventStore.taskAuthorization(taskRoute.taskId);
+        const event = eventStore.cancelTask(taskRoute.taskId);
+        if (!event) {
+          sendError(
+            response,
+            authorization.known ? 409 : 404,
+            authorization.known ? "TASK_NOT_ACTIVE" : "TASK_NOT_FOUND",
+            authorization.known
+              ? "This task can no longer be cancelled."
+              : "Task not found.",
+          );
+          return;
+        }
+        sendJson(response, 202, { data: event });
         return;
       }
 

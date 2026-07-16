@@ -28,6 +28,7 @@ import type { GetRef } from "antd";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 import {
   ApiError,
+  cancelProactiveTask,
   getHealth,
   getProactiveEvents,
   getRuntimeAccount,
@@ -44,18 +45,29 @@ import {
   type RuntimeStatus,
 } from "./ColleaguePresence";
 import { ConnectorQuickTests } from "./ConnectorQuickTests";
+import { EmailTaskCard, emailTaskDomId } from "./EmailTaskCard";
 import { MessageContent } from "./MessageContent";
 import "./styles.css";
 
 interface Message {
+  kind: "message";
   id: number;
   role: "ada" | "human";
   text: string;
   time: string;
 }
 
-const initialMessages: Message[] = [
+interface EmailTaskTimelineItem {
+  kind: "email-task";
+  id: string;
+  event: ProactiveEvent;
+}
+
+type TimelineItem = Message | EmailTaskTimelineItem;
+
+const initialTimeline: TimelineItem[] = [
   {
+    kind: "message",
     id: 1,
     role: "ada",
     text: "嗨，我是 Ada。\n今天想一起完成什麼？",
@@ -93,6 +105,7 @@ type TextAreaRef = GetRef<typeof Input.TextArea>;
 const eventSourceLabels: Record<ProactiveEvent["source"], string> = {
   gmail: "Gmail",
   outlook: "Outlook",
+  teams: "Teams",
   calendar: "行事曆",
   slack: "Slack",
   notion: "Notion",
@@ -110,6 +123,69 @@ function sourceLabel(source: ProactiveEvent["source"]): string {
   return eventSourceLabels[source];
 }
 
+function taskKey(event: ProactiveEvent): string {
+  return event.taskId ?? event.eventId;
+}
+
+function upsertTimelineTask(
+  current: TimelineItem[],
+  event: ProactiveEvent,
+): TimelineItem[] {
+  const key = taskKey(event);
+  const existing = current.findIndex(
+    (item) => item.kind === "email-task" && taskKey(item.event) === key,
+  );
+  const nextItem: EmailTaskTimelineItem = {
+    kind: "email-task",
+    id: `task:${key}`,
+    event,
+  };
+  if (existing < 0) return [...current, nextItem];
+  const existingItem = current[existing];
+  if (
+    existingItem.kind === "email-task" &&
+    Date.parse(existingItem.event.occurredAt) > Date.parse(event.occurredAt)
+  ) {
+    return current;
+  }
+  return current.map((item, index) => (index === existing ? nextItem : item));
+}
+
+function upsertNotificationTask(
+  current: ProactiveEvent[],
+  event: ProactiveEvent,
+): ProactiveEvent[] {
+  const key = taskKey(event);
+  const existing = current.find(
+    (candidate) => taskKey(candidate) === key,
+  );
+  if (
+    existing &&
+    Date.parse(existing.occurredAt) > Date.parse(event.occurredAt)
+  ) {
+    return current;
+  }
+  return [
+    event,
+    ...current.filter((candidate) => taskKey(candidate) !== key),
+  ].slice(0, 100);
+}
+
+function notificationActionLabel(event: ProactiveEvent): string {
+  return event.phase === "awaiting_approval"
+    ? `在 Ada 對話中審閱：${event.title}`
+    : `查看 ${sourceLabel(event.source)} 工作：${event.title}`;
+}
+
+function focusEmailTask(event: ProactiveEvent): void {
+  const card = document.getElementById(emailTaskDomId(taskKey(event)));
+  if (!(card instanceof HTMLElement)) return;
+  card.focus({ preventScroll: true });
+  if (typeof card.scrollIntoView === "function") {
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
 function formatEventTime(value: string): string {
   return new Intl.DateTimeFormat("zh-TW", {
     hour: "2-digit",
@@ -119,13 +195,14 @@ function formatEventTime(value: string): string {
 
 export function App({ voiceSupported = false }: AppProps) {
   const [notificationApi, notificationContextHolder] = notification.useNotification();
-  const [messages, setMessages] = useState(initialMessages);
+  const [timeline, setTimeline] = useState(initialTimeline);
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>("checking");
   const [proactiveEvents, setProactiveEvents] = useState<ProactiveEvent[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [latestAnnouncement, setLatestAnnouncement] = useState("");
   const [runtimeAccount, setRuntimeAccount] = useState<RuntimeAccountStatus>();
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
@@ -133,7 +210,11 @@ export function App({ voiceSupported = false }: AppProps) {
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [eventStreamGeneration, setEventStreamGeneration] = useState(0);
+  const [taskCancelStates, setTaskCancelStates] = useState<
+    Record<string, { busy: boolean; error?: string }>
+  >({});
   const seenEventIdsRef = useRef(new Set<string>());
+  const cancelRequestsRef = useRef(new Set<string>());
   const eventStreamReadyRef = useRef(false);
   const healthOnlineRef = useRef<boolean | undefined>(undefined);
   const messageListRef = useRef<HTMLOListElement>(null);
@@ -251,15 +332,28 @@ export function App({ voiceSupported = false }: AppProps) {
     const acceptEvent = (event: ProactiveEvent, announce: boolean) => {
       if (!active || seenEventIdsRef.current.has(event.eventId)) return;
       seenEventIdsRef.current.add(event.eventId);
-      setProactiveEvents((current) => [event, ...current].slice(0, 100));
-      if (!announce) return;
+      const key = taskKey(event);
+      setTimeline((current) => upsertTimelineTask(current, event));
+      setProactiveEvents((current) => upsertNotificationTask(current, event));
+      if (!announce || cancelRequestsRef.current.has(key)) return;
       setUnreadCount((current) => current + 1);
       setLatestAnnouncement(`${event.title}${event.summary ? `：${event.summary}` : ""}`);
       notificationApi.open({
+        key: event.eventId,
         title: event.title,
         description: event.summary ?? sourceLabel(event.source),
         placement: "topRight",
         duration: 6,
+        actions: (
+          <Button
+            type="link"
+            size="small"
+            aria-label={`在對話中查看：${event.title}`}
+            onClick={() => focusEmailTask(event)}
+          >
+            在對話中查看
+          </Button>
+        ),
       });
     };
 
@@ -300,7 +394,7 @@ export function App({ voiceSupported = false }: AppProps) {
     } else {
       list.scrollTop = list.scrollHeight;
     }
-  }, [messages]);
+  }, [isSending, timeline]);
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -357,31 +451,43 @@ export function App({ voiceSupported = false }: AppProps) {
     followConversationRef.current = true;
     const humanMessageId = Date.now();
     const adaMessageId = humanMessageId + 1;
-    setMessages((current) => [
+    setTimeline((current) => [
       ...current,
-      { id: humanMessageId, role: "human", text, time: "現在" },
+      {
+        kind: "message",
+        id: humanMessageId,
+        role: "human",
+        text,
+        time: "現在",
+      },
     ]);
     if (clearDraft) setDraft("");
-    setNotice("Ada 正在思考…");
+    setNotice("");
     setIsSending(true);
     let streamedText = "";
     try {
       const result = await postTurn(text, threadId, (delta) => {
         streamedText += delta;
-        setMessages((current) => {
+        setTimeline((current) => {
           const existing = current.findIndex(
-            (message) => message.id === adaMessageId,
+            (item) => item.kind === "message" && item.id === adaMessageId,
           );
           if (existing < 0) {
             return [
               ...current,
-              { id: adaMessageId, role: "ada", text: streamedText, time: "現在" },
+              {
+                kind: "message",
+                id: adaMessageId,
+                role: "ada",
+                text: streamedText,
+                time: "現在",
+              },
             ];
           }
-          return current.map((message) =>
-            message.id === adaMessageId
-              ? { ...message, text: streamedText }
-              : message,
+          return current.map((item) =>
+            item.kind === "message" && item.id === adaMessageId
+              ? { ...item, text: streamedText }
+              : item,
           );
         });
         setNotice("");
@@ -392,16 +498,21 @@ export function App({ voiceSupported = false }: AppProps) {
       } catch {
         // Conversation still works if browser storage is unavailable.
       }
-      setMessages((current) => {
-        const finalMessage = {
+      setTimeline((current) => {
+        const finalMessage: Message = {
+          kind: "message",
           id: adaMessageId,
-          role: "ada" as const,
+          role: "ada",
           text: result.reply.text,
           time: "現在",
         };
-        return current.some((message) => message.id === adaMessageId)
-          ? current.map((message) =>
-              message.id === adaMessageId ? finalMessage : message,
+        return current.some(
+          (item) => item.kind === "message" && item.id === adaMessageId,
+        )
+          ? current.map((item) =>
+              item.kind === "message" && item.id === adaMessageId
+                ? finalMessage
+                : item,
             )
           : [...current, finalMessage];
       });
@@ -424,6 +535,39 @@ export function App({ voiceSupported = false }: AppProps) {
   async function sendMessage(event?: FormEvent) {
     event?.preventDefault();
     await submitText(draft, true);
+  }
+
+  async function cancelTask(event: ProactiveEvent) {
+    const taskId = event.taskId;
+    if (!taskId || cancelRequestsRef.current.has(taskId)) return;
+    cancelRequestsRef.current.add(taskId);
+    setTaskCancelStates((current) => ({
+      ...current,
+      [taskId]: { busy: true },
+    }));
+    try {
+      const cancellationEvent = await cancelProactiveTask(taskId);
+      seenEventIdsRef.current.add(cancellationEvent.eventId);
+      setTimeline((current) => upsertTimelineTask(current, cancellationEvent));
+      setProactiveEvents((current) =>
+        upsertNotificationTask(current, cancellationEvent),
+      );
+      setTaskCancelStates((current) => {
+        const next = { ...current };
+        delete next[taskId];
+        return next;
+      });
+    } catch {
+      setTaskCancelStates((current) => ({
+        ...current,
+        [taskId]: {
+          busy: false,
+          error: "目前無法停止，任務可能仍在進行。",
+        },
+      }));
+    } finally {
+      cancelRequestsRef.current.delete(taskId);
+    }
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -490,7 +634,12 @@ export function App({ voiceSupported = false }: AppProps) {
     };
   }
 
-  const latestHumanMessage = [...messages].reverse().find((message) => message.role === "human");
+  const latestHumanMessage = [...timeline]
+    .reverse()
+    .find(
+      (item): item is Message =>
+        item.kind === "message" && item.role === "human",
+    );
   const currentFocus = isSending && latestHumanMessage
     ? latestHumanMessage.text
     : "等你交辦下一件事";
@@ -537,7 +686,9 @@ export function App({ voiceSupported = false }: AppProps) {
             <Popover
               trigger="click"
               placement="bottomRight"
+              open={notificationOpen}
               onOpenChange={(open) => {
+                setNotificationOpen(open);
                 if (open) setUnreadCount(0);
               }}
               content={
@@ -551,7 +702,7 @@ export function App({ voiceSupported = false }: AppProps) {
                   ) : (
                     <ol className="notification-list">
                       {proactiveEvents.map((event) => (
-                        <li className="notification-item" key={event.eventId}>
+                        <li className="notification-item" key={taskKey(event)}>
                           <div className="notification-meta">
                             <span>{sourceLabel(event.source)}</span>
                             <time dateTime={event.occurredAt}>{formatEventTime(event.occurredAt)}</time>
@@ -561,14 +712,15 @@ export function App({ voiceSupported = false }: AppProps) {
                           <Button
                             type="link"
                             size="small"
+                            aria-label={notificationActionLabel(event)}
                             onClick={() => {
-                              setDraft(
-                                `請處理這則${sourceLabel(event.source)}通知：${event.title}${event.summary ? `（${event.summary}）` : ""}`,
-                              );
-                              requestAnimationFrame(() => composerRef.current?.focus());
+                              focusEmailTask(event);
+                              setNotificationOpen(false);
                             }}
                           >
-                            交給 Ada
+                            {event.phase === "awaiting_approval"
+                              ? "在 Ada 對話中審閱"
+                              : "在對話中查看"}
                           </Button>
                         </li>
                       ))}
@@ -605,9 +757,16 @@ export function App({ voiceSupported = false }: AppProps) {
                 />
               </Tooltip>
             )}
-            <div className={`runtime-pill ${runtimeStatus}`} role="status">
+            <div
+              className={`runtime-pill ${isSending ? "working" : runtimeStatus}`}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               <span aria-hidden="true" />
-              {runtimeStatus === "ready"
+              {isSending
+                ? "Ada 處理中"
+                : runtimeStatus === "ready"
                 ? "Ada 已就緒"
                 : runtimeStatus === "busy"
                   ? "Ada 正忙"
@@ -637,7 +796,7 @@ export function App({ voiceSupported = false }: AppProps) {
             </header>
 
             <ol
-              className={`message-list ${messages.length === 1 ? "is-welcome" : ""}`}
+              className={`message-list ${timeline.length === 1 ? "is-welcome" : ""}`}
               aria-live="polite"
               ref={messageListRef}
               onScroll={(event) => {
@@ -647,25 +806,56 @@ export function App({ voiceSupported = false }: AppProps) {
                 followConversationRef.current = distanceFromBottom < 80;
               }}
             >
-              {messages.map((message) => (
-                <li className={`message-row ${message.role}`} key={message.id}>
-                  {message.role === "ada" && (
-                    <Avatar className="message-avatar" src="/ada-illustrated-avatar.webp">A</Avatar>
-                  )}
-                  <article className="message-bubble">
-                    <div className="message-meta">
-                      <strong>{message.role === "ada" ? "Ada" : "你"}</strong>
-                      <time>{message.time}</time>
-                    </div>
-                    {message.role === "ada" ? (
-                      <MessageContent text={message.text} />
-                    ) : (
-                      <p>{message.text}</p>
+              {timeline.map((item) =>
+                item.kind === "email-task" ? (
+                  <li className="message-row ada task-message-row" key={item.id}>
+                    <Avatar
+                      className="message-avatar"
+                      src="/ada-illustrated-avatar.webp"
+                    >
+                      A
+                    </Avatar>
+                    <EmailTaskCard
+                      event={item.event}
+                      cancelBusy={taskCancelStates[taskKey(item.event)]?.busy}
+                      cancelError={taskCancelStates[taskKey(item.event)]?.error}
+                      onCancel={(event) => void cancelTask(event)}
+                    />
+                  </li>
+                ) : (
+                  <li className={`message-row ${item.role}`} key={item.id}>
+                    {item.role === "ada" && (
+                      <Avatar className="message-avatar" src="/ada-illustrated-avatar.webp">A</Avatar>
                     )}
-                  </article>
+                    <article className="message-bubble">
+                      <div className="message-meta">
+                        <strong>{item.role === "ada" ? "Ada" : "你"}</strong>
+                        <time>{item.time}</time>
+                      </div>
+                      {item.role === "ada" ? (
+                        <MessageContent text={item.text} />
+                      ) : (
+                        <p>{item.text}</p>
+                      )}
+                    </article>
+                  </li>
+                ),
+              )}
+              {isSending && (
+                <li
+                  className="message-row ada thinking-message-row"
+                  aria-label="Ada 正在處理"
+                >
+                  <Avatar className="message-avatar" src="/ada-illustrated-avatar.webp">A</Avatar>
+                  <div className="thinking-bubble" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                    <small>Ada 正在處理</small>
+                  </div>
                 </li>
-              ))}
-              {messages.length === 1 && (
+              )}
+              {timeline.length === 1 && (
                 <li className="starter-actions" aria-label="常用交辦方式">
                   <div className="starter-heading">
                     <span>建議你先從這裡開始</span>

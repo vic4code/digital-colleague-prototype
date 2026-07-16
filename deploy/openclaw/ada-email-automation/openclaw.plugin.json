@@ -1,0 +1,18 @@
+{
+  "id": "ada-email-automation",
+  "name": "Ada Email Automation Guard",
+  "description": "Projects Gmail hook state to Ada's UI and enforces owner-only, in-thread, at-most-once replies.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "policyPath": { "type": "string", "minLength": 1 },
+      "eventApiUrl": { "type": "string", "minLength": 1 },
+      "stateDir": { "type": "string", "minLength": 1 },
+      "gogBinary": { "type": "string", "minLength": 1 }
+    }
+  }
+}
