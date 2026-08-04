@@ -1,0 +1,99 @@
+<svg viewBox="0 0 840 452" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+  <title>Risk-tiered tool control — the Runtime Policy Gate</title>
+  <desc>Every MCP tool call passes four control points: scope/whitelist, the runtime policy gate that evaluates role, tool, risk tier and target, a deterministic guard for standing-order exceptions, and an append-only audit. The gate allows T0/T1, requires approval for T2, and denies T3.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+  </defs>
+  <style>
+    .h1 { font-size: 15px; font-weight: 700; fill: #111827; }
+    .labelS { font-size: 11px; font-weight: 600; fill: #111827; }
+    .sub { font-size: 10.5px; fill: #6b7280; }
+    .tier { font-size: 10.5px; font-weight: 700; fill: #4b5563; letter-spacing: 0.4px; }
+    .flow { font-size: 9px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .edge { stroke: #9ca3af; stroke-width: 1.3; fill: none; }
+    .box { fill: #ffffff; stroke: #d1d5db; stroke-width: 1; }
+    .own1 { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.3; }
+    .secband { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1.4; }
+    .ok { fill: #f0fdf4; stroke: #86efac; stroke-width: 1.3; }
+    .warn { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.3; }
+    .bad { fill: #fef2f2; stroke: #fca5a5; stroke-width: 1.3; }
+    .okT { fill: #15803d; }
+    .warnT { fill: #c2410c; }
+    .badT { fill: #b91c1c; }
+    .chip { fill: #f3f4f6; stroke: #d1d5db; stroke-width: 0.9; }
+  </style>
+
+  <rect width="840" height="452" fill="#ffffff"/>
+  <text x="24" y="26" class="h1">Risk-tiered tool control — the Runtime Policy Gate</text>
+  <text x="24" y="44" class="sub">Every MCP tool call passes four control points. Orange = authored policy · Blue = security/audit · Green/red = allow/deny.</text>
+
+  <!-- top flow: 4 control points -->
+  <rect x="24" y="72" width="180" height="58" rx="8" class="box"/>
+  <text x="36" y="93" class="labelS">Tool call requested</text>
+  <text x="36" y="108" class="sub">by the agent runtime</text>
+  <text x="36" y="122" class="sub">tool · verb · target · data</text>
+
+  <line x1="204" y1="101" x2="222" y2="101" class="edge" marker-end="url(#arr)"/>
+  <rect x="224" y="72" width="180" height="58" rx="8" class="box"/>
+  <text x="236" y="93" class="labelS">1 · Scope / whitelist</text>
+  <text x="236" y="108" class="sub">info.yaml permissions</text>
+  <text x="236" y="122" class="sub">+ connector scopes</text>
+
+  <line x1="404" y1="101" x2="422" y2="101" class="edge" marker-end="url(#arr)"/>
+  <rect x="424" y="72" width="180" height="58" rx="8" class="own1"/>
+  <text x="436" y="93" class="labelS">2 · Runtime Policy Gate</text>
+  <text x="436" y="108" class="sub">evaluate role · tool</text>
+  <text x="436" y="122" class="sub">risk-tier · target</text>
+
+  <line x1="604" y1="101" x2="622" y2="101" class="edge" marker-end="url(#arr)"/>
+  <rect x="624" y="72" width="192" height="58" rx="8" class="box"/>
+  <text x="636" y="93" class="labelS">Policy decision</text>
+  <text x="636" y="108" class="sub">by risk tier →</text>
+  <text x="636" y="122" class="sub">allow / approve / deny</text>
+
+  <!-- branches -->
+  <line x1="690" y1="130" x2="150" y2="182" class="edge" marker-end="url(#arr)"/>
+  <text x="330" y="150" class="flow okT">T0 / T1 in policy</text>
+  <line x1="710" y1="130" x2="420" y2="182" class="edge" marker-end="url(#arr)"/>
+  <text x="512" y="150" class="flow warnT">T2</text>
+  <line x1="732" y1="130" x2="694" y2="182" class="edge" marker-end="url(#arr)"/>
+  <text x="726" y="150" class="flow badT">T3 / out of policy</text>
+
+  <rect x="24" y="184" width="252" height="52" rx="8" class="ok"/>
+  <text x="36" y="205" class="labelS">ALLOW · execute</text>
+  <text x="36" y="221" class="sub">within scope · logged · reversible</text>
+  <rect x="296" y="184" width="248" height="52" rx="8" class="warn"/>
+  <text x="308" y="205" class="labelS">REQUIRE APPROVAL</text>
+  <text x="308" y="221" class="sub">park as awaiting_approval → approvals inbox</text>
+  <rect x="564" y="184" width="252" height="52" rx="8" class="bad"/>
+  <text x="576" y="205" class="labelS">DENY + escalate</text>
+  <text x="576" y="221" class="sub">default for T3 / not-in-policy</text>
+
+  <!-- deterministic guard under ALLOW -->
+  <line x1="150" y1="236" x2="150" y2="258" class="edge" marker-end="url(#arr)"/>
+  <rect x="24" y="260" width="252" height="40" rx="8" class="box"/>
+  <text x="36" y="280" class="labelS">3 · Deterministic guard</text>
+  <text x="36" y="293" class="sub">standing-order exception only · non-LLM check</text>
+
+  <!-- audit band -->
+  <line x1="150" y1="300" x2="150" y2="326" class="edge" marker-end="url(#arr)"/>
+  <line x1="420" y1="236" x2="420" y2="326" class="edge" marker-end="url(#arr)"/>
+  <line x1="690" y1="236" x2="690" y2="326" class="edge" marker-end="url(#arr)"/>
+  <text x="24" y="320" class="tier">AUDIT · cross-cutting</text>
+  <rect x="24" y="328" width="792" height="40" rx="8" class="secband"/>
+  <text x="420" y="352" text-anchor="middle" class="labelS">4 · Audit — append-only events · every decision logged → status view</text>
+
+  <!-- risk tier legend -->
+  <rect x="24" y="384" width="192" height="46" rx="6" class="chip"/>
+  <text x="36" y="403" class="labelS">T0 · read</text>
+  <text x="36" y="419" class="sub">auto-allow in scope</text>
+  <rect x="224" y="384" width="192" height="46" rx="6" class="chip"/>
+  <text x="236" y="403" class="labelS">T1 · internal write</text>
+  <text x="236" y="419" class="sub">allow if in RBAC role</text>
+  <rect x="424" y="384" width="192" height="46" rx="6" class="chip"/>
+  <text x="436" y="403" class="labelS">T2 · external write</text>
+  <text x="436" y="419" class="sub">human approval</text>
+  <rect x="624" y="384" width="192" height="46" rx="6" class="chip"/>
+  <text x="636" y="403" class="labelS">T3 · destructive</text>
+  <text x="636" y="419" class="sub">deny / not granted</text>
+</svg>

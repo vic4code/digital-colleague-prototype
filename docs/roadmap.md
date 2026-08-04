@@ -59,45 +59,7 @@ and human approval for any external write. This is tier gating (governance.md
 §3) applied at connector/skill granularity — a *unified* policy engine is not
 built yet, and that is correct for L1.
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial','fontSize':'14px','lineColor':'#9aa4b2','primaryTextColor':'#1f2733','clusterBkg':'#f7f9fc','clusterBorder':'#cdd5e0'},'flowchart':{'curve':'basis','nodeSpacing':50,'rankSpacing':55,'padding':8}}}%%
-flowchart TB
-    subgraph Edge["EDGE · channels"]
-        C1("console"):::edge
-        C2("web · text / voice"):::edge
-        C3("Gmail · Slack<br/>official Codex connectors"):::edge
-    end
-
-    subgraph GW["STANDALONE GATEWAY · one process"]
-        IN("Intake + dispatch<br/>single Turn path"):::ctl
-        AP("Approval gate<br/>awaiting_approval"):::ctl
-        RT("Agent runtime<br/>Codex app-server"):::exec
-    end
-
-    subgraph ID["IDENTITY PLANE · local files"]
-        P("Person · Soul · Info"):::id
-        SK("Skills · plugins"):::id
-        MEM("Memory · JSONL"):::id
-        POL("Policy + safety-boundary"):::id
-    end
-
-    MCP("Codex / MCP connectors<br/>Gmail · Slack · Notion · Calendar"):::tool
-    EV("Event store → web status view<br/>read-only"):::view
-
-    C1 & C2 & C3 --> IN --> RT
-    RT -->|external write| AP -->|approved| MCP
-    RT -->|read| MCP
-    ID -. injected .- RT
-    POL -. gates .- AP
-    IN & AP & RT --> EV
-
-    classDef edge fill:#eaf2fd,stroke:#2f6fed,stroke-width:1.5px,color:#0b3b8c;
-    classDef ctl fill:#fdf1e3,stroke:#e08600,stroke-width:1.5px,color:#8a4b00;
-    classDef exec fill:#f1eafb,stroke:#7a3ff2,stroke-width:1.5px,color:#3d1f80;
-    classDef id fill:#e7f6ec,stroke:#1f9d57,stroke-width:1.5px,color:#0f5c31;
-    classDef tool fill:#eef1f4,stroke:#556270,stroke-width:1.5px,color:#2b333d;
-    classDef view fill:#fce9f1,stroke:#d93b84,stroke-width:1.5px,color:#8a1f52;
-```
+![Level 1 — standalone prototype architecture](diagrams/roadmap-l1.svg)
 
 ---
 
@@ -128,53 +90,7 @@ JSON and becomes a **first-class control plane**.
 | Internal review process for release / iteration / retirement after a colleague goes live | Release/review pipeline (promote a colleague definition through review → prod; version + rollback) | ⬜ |
 | Business-unit culture knowledge + general-purpose skills & company rules | Org/BU knowledge packs as docs; company-wide skill + rule plugins | ⬜ |
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial','fontSize':'14px','lineColor':'#9aa4b2','primaryTextColor':'#1f2733','clusterBkg':'#f7f9fc','clusterBorder':'#cdd5e0'},'flowchart':{'curve':'basis','nodeSpacing':50,'rankSpacing':55,'padding':8}}}%%
-flowchart TB
-    subgraph Edge["EDGE"]
-        CH("channels + inbound events<br/>Gmail · Teams · Slack · Calendar · Notion"):::edge
-        SCH("Scheduler / triggers<br/>proactive · persistent"):::edge
-    end
-
-    subgraph CP["CONTROL PLANE · Agent Hub"]
-        Q("Task queue<br/>intake · persistence · continuity"):::ctl
-        CTRL("Controller<br/>who-can-task · reply policy"):::ctl
-        POLENG("Policy &amp; Approval Engine<br/>RBAC · risk-tier · approval"):::ctl
-        COST("Cost meter / budgets"):::ctl
-    end
-
-    subgraph EX["EXECUTION"]
-        RT("Agent runtime · Codex"):::exec
-        REG("Connector / skill registry"):::exec
-    end
-
-    subgraph SVC["SHARED SERVICES"]
-        MEM("Long-term memory service"):::id
-        RBAC("RBAC + policy store"):::id
-        AUD("Audit · append-only"):::id
-        REL("Release / review pipeline"):::id
-    end
-
-    TOOLS("MCP tools / connectors<br/>tier-gated CRUD"):::tool
-    VIEW("Status view + approvals inbox"):::view
-
-    CH & SCH --> Q --> CTRL --> RT
-    RT -->|tool call| POLENG -->|allow| TOOLS
-    POLENG -->|require approval| VIEW
-    POLENG -. reads .- RBAC
-    RT -. uses .- REG
-    RT <--> MEM
-    CTRL & POLENG & RT --> AUD --> VIEW
-    COST -. caps .- RT
-    REL -. gates promotion .- RT
-
-    classDef edge fill:#eaf2fd,stroke:#2f6fed,stroke-width:1.5px,color:#0b3b8c;
-    classDef ctl fill:#fdf1e3,stroke:#e08600,stroke-width:1.5px,color:#8a4b00;
-    classDef exec fill:#f1eafb,stroke:#7a3ff2,stroke-width:1.5px,color:#3d1f80;
-    classDef id fill:#e7f6ec,stroke:#1f9d57,stroke-width:1.5px,color:#0f5c31;
-    classDef tool fill:#eef1f4,stroke:#556270,stroke-width:1.5px,color:#2b333d;
-    classDef view fill:#fce9f1,stroke:#d93b84,stroke-width:1.5px,color:#8a1f52;
-```
+![Level 2 — Agent Hub / AI workstation architecture](diagrams/roadmap-l2.svg)
 
 ---
 
@@ -208,40 +124,7 @@ systems and departments — on a centralized cloud platform.
 |---|---|---|
 | Company-wide culture knowledge | Org-wide knowledge + **org-level policy/governance** layered over each deployment's Policy Engine; cross-unit authorization | ⬜ |
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial','fontSize':'14px','lineColor':'#9aa4b2','primaryTextColor':'#1f2733','clusterBkg':'#f7f9fc','clusterBorder':'#cdd5e0'},'flowchart':{'curve':'basis','nodeSpacing':50,'rankSpacing':55,'padding':8}}}%%
-flowchart TB
-    HUMANS("humans / BU units"):::view
-
-    subgraph COORD["COORDINATION PLANE · new at L3"]
-        RTR("Peer routing + handoff"):::coord
-        CTX("Shared context bus"):::coord
-        ORGPOL("Org-wide policy / governance<br/>cross-unit authorization"):::coord
-        CAUD("Central audit / observability"):::coord
-    end
-
-    subgraph DEPloys["INDEPENDENT SINGLE-COLLEAGUE DEPLOYMENTS · each = an L2 box · ADR-003"]
-        D1("Colleague A<br/>Legal — Ada"):::dep
-        D2("Colleague B<br/>Finance"):::dep
-        D3("Colleague C<br/>HR"):::dep
-    end
-
-    SYS("internal systems<br/>core banking · ITSM · DMS"):::tool
-
-    HUMANS --> RTR
-    RTR <--> D1 & D2 & D3
-    D1 & D2 & D3 <--> CTX
-    ORGPOL -. constrains .- D1
-    ORGPOL -. constrains .- D2
-    ORGPOL -. constrains .- D3
-    D1 & D2 & D3 --> CAUD
-    D1 & D2 & D3 <--> SYS
-
-    classDef coord fill:#ecebfb,stroke:#4b3fd6,stroke-width:1.5px,color:#241c8c;
-    classDef dep fill:#e7f6ec,stroke:#1f9d57,stroke-width:1.5px,color:#0f5c31;
-    classDef tool fill:#eef1f4,stroke:#556270,stroke-width:1.5px,color:#2b333d;
-    classDef view fill:#fce9f1,stroke:#d93b84,stroke-width:1.5px,color:#8a1f52;
-```
+![Level 3 — cross-unit coordination platform architecture](diagrams/roadmap-l3.svg)
 
 ---
 

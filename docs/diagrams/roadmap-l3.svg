@@ -1,0 +1,89 @@
+<svg viewBox="0 0 840 470" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+  <title>Level 3 — cross-unit coordination platform</title>
+  <desc>A coordination plane sits above several independent single-colleague deployments. It routes and hands off work, shares context, applies org-wide policy, and centralizes audit. Each deployment is still one colleague (ADR-003) and connects to internal systems.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <style>
+    .h1 { font-size: 15px; font-weight: 700; fill: #111827; }
+    .label { font-size: 12px; font-weight: 600; fill: #111827; }
+    .labelS { font-size: 11px; font-weight: 600; fill: #111827; }
+    .sub { font-size: 10.5px; fill: #6b7280; }
+    .port { font-size: 10px; fill: #9ca3af; font-family: ui-monospace, monospace; }
+    .tier { font-size: 10.5px; font-weight: 700; fill: #4b5563; letter-spacing: 0.4px; }
+    .own { font-size: 9px; font-weight: 700; fill: #c2410c; font-family: ui-monospace, monospace; }
+    .sec { font-size: 9px; font-weight: 700; fill: #1d4ed8; font-family: ui-monospace, monospace; }
+    .edge { stroke: #9ca3af; stroke-width: 1.3; fill: none; }
+    .edgeB { stroke: #2563eb; stroke-width: 1.3; fill: none; }
+    .box { fill: #ffffff; stroke: #d1d5db; stroke-width: 1; }
+    .container { fill: #fafafa; stroke: #d1d5db; stroke-width: 1.2; }
+    .own1 { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.3; }
+    .human { fill: #eff6ff; stroke: #3b82f6; stroke-width: 1.4; }
+    .secband { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1.4; }
+    .chip { fill: #fff7ed; stroke: #fdba74; stroke-width: 0.9; }
+    .chipB { fill: #dbeafe; stroke: #93c5fd; stroke-width: 0.9; }
+  </style>
+
+  <rect width="840" height="470" fill="#ffffff"/>
+  <text x="24" y="26" class="h1">Level 3 — cross-unit coordination platform</text>
+  <text x="24" y="44" class="sub">A coordination plane above independent single-colleague deployments (ADR-003) — not many colleagues in one process.</text>
+
+  <!-- HUMANS -->
+  <text x="24" y="74" class="tier">HUMAN · BU UNITS</text>
+  <rect x="24" y="84" width="792" height="38" rx="8" class="human"/>
+  <text x="420" y="107" text-anchor="middle" class="labelS">Humans / business units — each reaches a colleague through that colleague's own surface</text>
+
+  <line x1="420" y1="122" x2="420" y2="150" class="edgeB" marker-end="url(#arrB)"/>
+
+  <!-- COORDINATION PLANE -->
+  <text x="24" y="144" class="tier">COORDINATION PLANE · NEW AT L3</text>
+  <rect x="24" y="154" width="792" height="72" rx="10" class="container"/>
+  <rect x="38" y="166" width="132" height="14" rx="7" class="chipB"/>
+  <text x="46" y="176" class="sec">WE DESIGN · REVIEWED</text>
+  <rect x="40" y="186" width="184" height="34" rx="6" class="box"/>
+  <text x="132" y="207" text-anchor="middle" class="labelS">Peer routing + handoff</text>
+  <rect x="232" y="186" width="184" height="34" rx="6" class="box"/>
+  <text x="324" y="207" text-anchor="middle" class="labelS">Shared context bus</text>
+  <rect x="424" y="186" width="184" height="34" rx="6" class="secband"/>
+  <text x="516" y="203" text-anchor="middle" class="labelS">Org-wide policy / governance</text>
+  <text x="516" y="215" text-anchor="middle" class="sub">cross-unit authorization</text>
+  <rect x="616" y="186" width="184" height="34" rx="6" class="box"/>
+  <text x="708" y="207" text-anchor="middle" class="labelS">Central audit / observability</text>
+
+  <line x1="404" y1="226" x2="404" y2="256" class="edge" marker-end="url(#arr)"/>
+  <line x1="436" y1="256" x2="436" y2="226" class="edge" marker-end="url(#arr)"/>
+  <text x="450" y="247" class="port">handoff · shared context</text>
+
+  <!-- DEPLOYMENTS -->
+  <text x="24" y="272" class="tier">INDEPENDENT SINGLE-COLLEAGUE DEPLOYMENTS · each = an L2 box (ADR-003)</text>
+  <rect x="24" y="282" width="792" height="76" rx="10" class="container"/>
+  <rect x="40" y="296" width="245" height="50" rx="6" class="box"/>
+  <rect x="50" y="304" width="94" height="13" rx="6" class="chip"/>
+  <text x="57" y="313.5" class="own">ONE COLLEAGUE</text>
+  <text x="52" y="333" class="labelS">Colleague A — Legal (Ada)</text>
+  <rect x="297" y="296" width="245" height="50" rx="6" class="box"/>
+  <rect x="307" y="304" width="94" height="13" rx="6" class="chip"/>
+  <text x="314" y="313.5" class="own">ONE COLLEAGUE</text>
+  <text x="309" y="333" class="labelS">Colleague B — Finance</text>
+  <rect x="554" y="296" width="245" height="50" rx="6" class="box"/>
+  <rect x="564" y="304" width="94" height="13" rx="6" class="chip"/>
+  <text x="571" y="313.5" class="own">ONE COLLEAGUE</text>
+  <text x="566" y="333" class="labelS">Colleague C — HR</text>
+
+  <line x1="420" y1="358" x2="420" y2="386" class="edge" marker-end="url(#arr)"/>
+  <text x="432" y="377" class="port">official connectors</text>
+
+  <!-- INTERNAL SYSTEMS -->
+  <text x="24" y="406" class="tier">INTERNAL SYSTEMS · integrate without changing a colleague runtime</text>
+  <rect x="24" y="416" width="152" height="38" rx="6" class="box"/>
+  <text x="100" y="440" text-anchor="middle" class="sub">Core banking</text>
+  <rect x="184" y="416" width="152" height="38" rx="6" class="box"/>
+  <text x="260" y="440" text-anchor="middle" class="sub">ITSM</text>
+  <rect x="344" y="416" width="152" height="38" rx="6" class="box"/>
+  <text x="420" y="440" text-anchor="middle" class="sub">DMS</text>
+  <rect x="504" y="416" width="152" height="38" rx="6" class="box"/>
+  <text x="580" y="440" text-anchor="middle" class="sub">Data lake</text>
+  <rect x="664" y="416" width="152" height="38" rx="6" class="box"/>
+  <text x="740" y="440" text-anchor="middle" class="sub">Internal APIs · …</text>
+</svg>

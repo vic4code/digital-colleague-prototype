@@ -65,35 +65,7 @@ invariant is platform/tech-controlled.** The subtlety is that "skill" and
   (read-only default, approval-for-external, no prompt-based scope widening =
   **Platform**).
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial','fontSize':'14px','lineColor':'#9aa4b2','primaryTextColor':'#1f2733','clusterBkg':'#f7f9fc','clusterBorder':'#cdd5e0'},'flowchart':{'curve':'basis','nodeSpacing':46,'rankSpacing':55,'padding':8}}}%%
-flowchart LR
-    subgraph BU["BU-controlled · close to the scenario · data, not code"]
-        direction TB
-        DOC("Business docs / knowledge"):::bu
-        SKP("Skill procedure<br/>SKILL.md body"):::bu
-        PER("Person · role · mandate"):::bu
-        VOI("Soul · voice · values"):::bu
-        THR("Policy thresholds<br/>allowlist · caps · on/off"):::bu
-    end
-
-    BND(["CONTROL<br/>BOUNDARY"]):::line
-
-    subgraph PLAT["Platform-controlled · infra &amp; safety invariants"]
-        direction TB
-        BIND("Skill → tool/scope binding"):::plat
-        INFO("Info · accounts · OAuth · secrets"):::plat
-        INV("Policy invariants<br/>read-only default · approval-for-external"):::plat
-        ENG("RBAC · Policy Engine · risk tiers"):::plat
-        INFRA("Runtime · gateway · memory · deploy · cost"):::plat
-    end
-
-    BU --- BND --- PLAT
-
-    classDef bu fill:#e7f6ec,stroke:#1f9d57,stroke-width:1.5px,color:#0f5c31;
-    classDef plat fill:#eaf2fd,stroke:#2f6fed,stroke-width:1.5px,color:#0b3b8c;
-    classDef line fill:#fff5f5,stroke:#d64545,stroke-width:2px,color:#8a2020;
-```
+![Control boundary: BU-controlled vs platform-controlled](diagrams/governance-boundary.svg)
 
 ---
 
@@ -174,34 +146,7 @@ low-risk shapes. §3 generalizes this pattern to **every** connector.
 Four layers, coarse → fine. The **Runtime Policy Gate** is the concrete
 "runtime controller at the gateway" the team asked to make explicit.
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial','fontSize':'14px','lineColor':'#9aa4b2','primaryTextColor':'#1f2733','clusterBkg':'#f7f9fc','clusterBorder':'#cdd5e0'},'flowchart':{'curve':'basis','nodeSpacing':50,'rankSpacing':52,'padding':8}}}%%
-flowchart TB
-    A("Agent runtime wants a tool call<br/>tool · verb · target · data"):::exec
-    L1c("1 · Scope / whitelist<br/>info.yaml permissions + connector scopes"):::gate
-    L2c("2 · Runtime Policy Gate · controller<br/>evaluate: role · tool · risk-tier · target"):::gate
-    DEC{"decision"}:::dec
-    L3c("3 · Deterministic guard<br/>standing-order exception:<br/>exact account · counterparty · idempotency"):::gate
-    ALLOW("execute"):::ok
-    APPROVE("park as awaiting_approval →<br/>approvals inbox / status view"):::warn
-    DENY("deny + escalate"):::bad
-    AUD("4 · Audit · append-only events<br/>every decision logged → status view"):::view
-
-    A --> L1c --> L2c --> DEC
-    DEC -->|T0 / T1 in policy| ALLOW
-    DEC -->|T2| APPROVE
-    DEC -->|T3 / out of policy| DENY
-    ALLOW --> L3c
-    ALLOW & APPROVE & DENY --> AUD
-
-    classDef exec fill:#f1eafb,stroke:#7a3ff2,stroke-width:1.5px,color:#3d1f80;
-    classDef gate fill:#fdf1e3,stroke:#e08600,stroke-width:1.5px,color:#8a4b00;
-    classDef dec fill:#fff8e1,stroke:#f5a623,stroke-width:1.5px,color:#7a5300;
-    classDef ok fill:#e7f6ec,stroke:#1f9d57,stroke-width:1.5px,color:#0f5c31;
-    classDef warn fill:#fff4e0,stroke:#ef8a00,stroke-width:1.5px,color:#8a4b00;
-    classDef bad fill:#fdecec,stroke:#d64545,stroke-width:1.5px,color:#8a2020;
-    classDef view fill:#fce9f1,stroke:#d93b84,stroke-width:1.5px,color:#8a1f52;
-```
+![Risk-tiered tool control: the Runtime Policy Gate](diagrams/governance-policy-gate.svg)
 
 1. **Scope / whitelist (identity plane)** — `info.yaml → permissions` + each
    connector's OAuth scopes. Static and coarsest: the colleague simply cannot
