@@ -1,0 +1,66 @@
+<svg viewBox="0 0 840 432" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+  <title>Control boundary — BU-controlled vs platform-controlled</title>
+  <desc>Two columns divided by the control boundary. The left column lists BU-owned assets close to the business scenario. The right lists platform-owned infrastructure and safety invariants. A skill and a policy each split across the line.</desc>
+  <style>
+    .h1 { font-size: 15px; font-weight: 700; fill: #111827; }
+    .labelS { font-size: 11px; font-weight: 600; fill: #111827; }
+    .sub { font-size: 10.5px; fill: #6b7280; }
+    .tier { font-size: 10.5px; font-weight: 700; fill: #4b5563; letter-spacing: 0.4px; }
+    .bound { font-size: 11px; font-weight: 700; fill: #b45309; letter-spacing: 1px; }
+    .containerO { fill: #fffaf5; stroke: #fdba74; stroke-width: 1.3; }
+    .containerB { fill: #f6faff; stroke: #93c5fd; stroke-width: 1.3; }
+    .own1 { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.2; }
+    .boxB { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1.2; }
+    .divider { stroke: #f59e0b; stroke-width: 2; stroke-dasharray: 6 5; fill: none; }
+  </style>
+
+  <rect width="840" height="432" fill="#ffffff"/>
+  <text x="24" y="26" class="h1">Control boundary — who controls what</text>
+  <text x="24" y="44" class="sub">Orange = BU-owned (close to the business scenario) · Blue = platform-owned (infra &amp; safety invariants).</text>
+
+  <!-- LEFT: BU -->
+  <text x="24" y="74" class="tier">BU-CONTROLLED · CLOSE TO THE SCENARIO (data, not code)</text>
+  <rect x="24" y="84" width="372" height="286" rx="10" class="containerO"/>
+  <rect x="40" y="100" width="340" height="44" rx="6" class="own1"/>
+  <text x="52" y="120" class="labelS">Business docs / knowledge</text>
+  <text x="52" y="135" class="sub">playbooks · templates · domain rules</text>
+  <rect x="40" y="152" width="340" height="44" rx="6" class="own1"/>
+  <text x="52" y="172" class="labelS">Skill procedure — SKILL.md body</text>
+  <text x="52" y="187" class="sub">steps · domain logic · output format</text>
+  <rect x="40" y="204" width="340" height="44" rx="6" class="own1"/>
+  <text x="52" y="224" class="labelS">Person · role · mandate</text>
+  <text x="52" y="239" class="sub">business identity (human labels)</text>
+  <rect x="40" y="256" width="340" height="44" rx="6" class="own1"/>
+  <text x="52" y="276" class="labelS">Soul · voice · values</text>
+  <text x="52" y="291" class="sub">tone &amp; style (boundaries ratified jointly)</text>
+  <rect x="40" y="308" width="340" height="44" rx="6" class="own1"/>
+  <text x="52" y="328" class="labelS">Policy thresholds</text>
+  <text x="52" y="343" class="sub">allowlist · caps · on/off</text>
+
+  <!-- DIVIDER -->
+  <line x1="420" y1="84" x2="420" y2="370" class="divider"/>
+  <text x="420" y="227" transform="rotate(-90 420 227)" text-anchor="middle" class="bound">CONTROL BOUNDARY</text>
+
+  <!-- RIGHT: PLATFORM -->
+  <text x="444" y="74" class="tier">PLATFORM-CONTROLLED · INFRA &amp; SAFETY INVARIANTS</text>
+  <rect x="444" y="84" width="372" height="286" rx="10" class="containerB"/>
+  <rect x="460" y="100" width="340" height="44" rx="6" class="boxB"/>
+  <text x="472" y="120" class="labelS">Skill → tool / scope binding</text>
+  <text x="472" y="135" class="sub">which connectors + scopes a skill may call</text>
+  <rect x="460" y="152" width="340" height="44" rx="6" class="boxB"/>
+  <text x="472" y="172" class="labelS">Info · accounts · OAuth · secrets</text>
+  <text x="472" y="187" class="sub">credentials &amp; connector app IDs</text>
+  <rect x="460" y="204" width="340" height="44" rx="6" class="boxB"/>
+  <text x="472" y="224" class="labelS">Policy invariants</text>
+  <text x="472" y="239" class="sub">read-only default · approval-for-external</text>
+  <rect x="460" y="256" width="340" height="44" rx="6" class="boxB"/>
+  <text x="472" y="276" class="labelS">RBAC · Policy Engine · risk tiers</text>
+  <text x="472" y="291" class="sub">the control machinery itself</text>
+  <rect x="460" y="308" width="340" height="44" rx="6" class="boxB"/>
+  <text x="472" y="328" class="labelS">Runtime · gateway · memory · deploy · cost</text>
+  <text x="472" y="343" class="sub">infrastructure</text>
+
+  <!-- NOTE -->
+  <text x="24" y="392" class="sub">The two things that straddle the line: a <tspan font-weight="700" fill="#111827">skill</tspan> (procedure = BU · tool binding = platform), and a <tspan font-weight="700" fill="#111827">policy</tspan> (thresholds = BU · invariants = platform).</text>
+  <text x="24" y="410" class="sub">Draw the boundary inside the skill and inside the policy — not around them.</text>
+</svg>

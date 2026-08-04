@@ -54,6 +54,22 @@ Components are named by *what they do*, not by which product implements them. Th
 
 Every arrow in that flow is an interface (`Channel`, `AgentRuntime`, `MemoryStore`), which is what makes a colleague definition portable between standalone and distributed.
 
+## Control plane: RBAC, approval, and risk-tiered tool access
+
+The control/identity planes above carry one box the early diagram only named in
+passing: a **Runtime Policy Gate** (the "runtime controller") that governs both
+*intake* (who may task the colleague, how it may reply) and *tool execution*
+(gating every MCP tool call by a risk tier — read / internal-write /
+external-write / destructive). Today this lives as per-capability policy
+(`colleagues/ada/policies/email-automation.json`), the read-only-by-default
+`safety-boundary.md`, coarse `permissions:` in `info.yaml`, and the
+`awaiting_approval` / `approval_required` states in `src/events`. It is
+formalized — with the BU-vs-platform control boundary and the tier model — in
+[governance.md](./governance.md).
+
+The staged rollout of these capabilities across the L1 → L2 → L3 capability
+ladder is in [roadmap.md](./roadmap.md).
+
 ## Vendor neutrality
 
 The architecture glossary names the runtimes explicitly: *"Codex / Claude Code / app-server — vendor agent runtimes we build on (no vendor lock at the platform layer)."* Here that's the `AgentRuntime` interface:
