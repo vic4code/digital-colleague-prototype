@@ -2,13 +2,13 @@
 
 This document answers the three alignment questions the team needs to settle:
 
-1. **doc / skill 的邊界** — which assets a BU user controls vs. which the
-   platform/tech team controls.
+1. **doc / skill boundary** — which assets a BU (business-unit) user controls
+   vs. which the platform / tech team controls.
 2. **Controller** — whether different members can assign tasks to a colleague,
    and how it is allowed to reply.
 3. **Risk-tiered MCP tool control** — whether a colleague's tool operations
-   (增/刪/改/查 = create/delete/update/read) should be controlled to different
-   degrees by risk level.
+   (create / delete / update / read) should be controlled to different degrees
+   by risk level.
 
 > **Design stance:** we do **not** invent a new control system. The repo
 > already ships the primitives — we *formalize and generalize* them:
@@ -67,7 +67,7 @@ invariant is platform/tech-controlled.** The subtlety is that "skill" and
 
 ```mermaid
 flowchart LR
-    subgraph BU["BU-controlled — 貼近場景 (data, not code)"]
+    subgraph BU["BU-controlled — close to the scenario (data, not code)"]
         direction TB
         DOC["Business docs / knowledge"]:::bu
         SKP["Skill procedure (SKILL.md body)"]:::bu
@@ -114,14 +114,13 @@ map — human labels only, no agent graph per ADR-003):
 - `other internal` — elsewhere in the org.
 - `external` — outside the org.
 
-**Request types:** `query` (查, read-only) · `task-internal` (reversible,
-internal effect) · `task-external` (leaves the org / irreversible / affects
-others).
+**Request types:** `query` (read-only) · `task-internal` (reversible, internal
+effect) · `task-external` (leaves the org / irreversible / affects others).
 
 **Intake × reply matrix** (L2 target; L1 collapses the first column to
 owner-only):
 
-| Requester | query (查) | task-internal | task-external |
+| Requester | query | task-internal | task-external |
 |---|---|---|---|
 | owner / manager | ✅ direct answer | ✅ do + track | ⚠️ **draft → approval** |
 | team member | ✅ direct answer | ✅ do + track | ⚠️ draft → approval |
@@ -142,7 +141,7 @@ owner-only):
 
 ---
 
-## §3 — Risk-tiered control of MCP tool operations (增/刪/改/查)
+## §3 — Risk-tiered control of MCP tool operations (create / delete / update / read)
 
 **Yes — tool operations must be gated by risk, not treated uniformly.** But
 "risk" is not just the CRUD verb: a *read* of sensitive data and a *create* of
@@ -157,10 +156,10 @@ risk = f(CRUD verb, reversibility, externality, data sensitivity)
 
 | Tier | Examples | Default control |
 |---|---|---|
-| **T0 — read / query (查)** | read a ticket, search docs, read inbox | **auto-allow** within the account's granted scope; logged |
-| **T1 — internal reversible write (增/改, internal)** | add a Jira comment, create a draft note, update an internal doc | **allow** if within the colleague's RBAC role + workspace scope; logged; reversible |
-| **T2 — external / low-reversibility (增/改, external)** | send an external email, post to a public Slack, add a new recipient, attach a file, change something others see | **approval required** (human-in-the-loop) — parked as `awaiting_approval` |
-| **T3 — destructive / irreversible / sensitive (刪, 金流, 權限, 憑證)** | delete records, move money, change permissions, touch credentials | **default deny**; requires elevated approval (e.g. owner + second control), or simply not granted at L1/L2 |
+| **T0 — read / query** | read a ticket, search docs, read inbox | **auto-allow** within the account's granted scope; logged |
+| **T1 — internal reversible write** (create / update, internal) | add a Jira comment, create a draft note, update an internal doc | **allow** if within the colleague's RBAC role + workspace scope; logged; reversible |
+| **T2 — external / low-reversibility write** (create / update, external) | send an external email, post to a public Slack, add a new recipient, attach a file, change something others see | **approval required** (human-in-the-loop) — parked as `awaiting_approval` |
+| **T3 — destructive / irreversible / sensitive** (delete, funds, permissions, credentials) | delete records, move money, change permissions, touch credentials | **default deny**; requires elevated approval (e.g. owner + second control), or simply not granted at L1/L2 |
 
 This is exactly what `email-automation.json` already encodes for one capability:
 `allowNewRecipients:false` / `allowAttachments:false` / `allowCc:false` are T2
@@ -168,7 +167,7 @@ blocks; `escalateOn: [legal_or_financial_commitment, credential_or_sensitive_dat
 recipient_change, …]` are T2/T3 triggers; `allowedReplyKinds` whitelists only
 low-risk shapes. §3 generalizes this pattern to **every** connector.
 
-### Where it is enforced — layered control points (the "具體" part)
+### Where it is enforced — layered control points (the concrete part)
 
 Four layers, coarse → fine. The **Runtime Policy Gate** is the concrete
 "runtime controller at the gateway" the team asked to make explicit.
@@ -177,7 +176,7 @@ Four layers, coarse → fine. The **Runtime Policy Gate** is the concrete
 flowchart TB
     A["Agent runtime wants a tool call<br/>(tool, verb, target, data)"]:::exec
     L1c["1 · Scope / whitelist<br/>info.yaml permissions + connector scopes<br/>(can't call what you can't reach)"]:::gate
-    L2c["2 · Runtime Policy Gate (controller)<br/>evaluate: role × tool × risk-tier × target"]:::gate
+    L2c["2 · Runtime Policy Gate (controller)<br/>evaluate: role x tool x risk-tier x target"]:::gate
     DEC{"decision"}:::dec
     L3c["3 · Deterministic guard<br/>(for any standing-order exception:<br/>exact account · counterparty · idempotency)"]:::gate
     ALLOW["execute"]:::ok

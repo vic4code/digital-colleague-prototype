@@ -27,34 +27,35 @@ Legend: ✅ exists today · 🟡 partial today · ⬜ planned
 
 ## Level 1 — Standalone prototype
 
-**對應職級:** 中專 / 高專 ·
-**Proficiency:** 具備特定領域之專業深度，產出品質仰賴 mentor 一對一互動。
+**Job grade:** Junior / Senior Specialist ·
+**Proficiency:** deep expertise in a specific domain; output quality still
+depends on one-on-one mentor interaction.
 
 The colleague has real depth in one domain (e.g. Legal Ops), but a human is in
 the loop for quality — exactly the "draft, humans decide" boundary the platform
 already enforces.
 
-### 技術研發重點 → architecture
+### R&D focus → architecture
 
 | Framework goal | In this repo | State |
 |---|---|---|
-| 建立數位同事 prototype（角色、規則、技能） | `person.yaml` / `SOUL.md` / `info.yaml` + `plugins/*/skills/*/SKILL.md` | ✅ |
-| 建立短/長期運行環境及架構方案 | standalone gateway + `deploy/` (docker, macOS launchd, Windows) | ✅ |
-| 任務與交付工作的可視化 | `web/` status view — `ColleaguePresence`, task cards driven by `src/events` phases | 🟡 |
+| Build the digital-colleague prototype (persona, rules, skills) | `person.yaml` / `SOUL.md` / `info.yaml` + `plugins/*/skills/*/SKILL.md` | ✅ |
+| Establish short/long-term runtime environment and architecture | standalone gateway + `deploy/` (docker, macOS launchd, Windows) | ✅ |
+| Visualize tasks and delivered work | `web/` status view — `ColleaguePresence`, task cards driven by `src/events` phases | 🟡 |
 | Codex-native runtime | `CodexAppServerRuntime` (`initialize`/`thread`/`turn`) | ✅ |
 
-### 管理機制 → governance (see governance.md)
+### Management & enablement → governance (see governance.md)
 
 | Framework goal | In this repo | State |
 |---|---|---|
-| 技能庫框架 (Skills) | plugin + `SKILL.md` model | ✅ |
-| 基本工作守則 | `resources/safety-boundary.md` (read-only by default; external writes need approval) | ✅ |
-| 人性 / 擬人化 | Person + Soul + illustrated avatar in `web/public` | 🟡 |
+| Skills library framework | plugin + `SKILL.md` model | ✅ |
+| Basic working rules | `resources/safety-boundary.md` (read-only by default; external writes need approval) | ✅ |
+| Humanization / persona presence | Person + Soul + illustrated avatar in `web/public` | 🟡 |
 | Per-capability policy | `colleagues/ada/policies/email-automation.json` (owner-only allowlist, caps, `escalateOn`) | ✅ |
 
 At L1 the control model is deliberately **conservative and mostly static**:
 read-only-by-default at connector boundaries, a per-capability allowlist policy,
-and human approval for any external write. This is Tier gating (governance.md
+and human approval for any external write. This is tier gating (governance.md
 §3) applied at connector/skill granularity — a *unified* policy engine is not
 built yet, and that is correct for L1.
 
@@ -102,31 +103,32 @@ flowchart TB
 
 ---
 
-## Level 2 — Agent Hub / AI 工作站
+## Level 2 — Agent Hub / AI workstation
 
-**對應職級:** 襄理 ·
-**Proficiency:** 具備基礎金融業/組織文化，能觸類旁通與自我學習。
+**Job grade:** Assistant Manager ·
+**Proficiency:** baseline financial-industry / organizational culture; can
+generalize across domains and self-learn.
 
 The colleague acts **proactively**, remembers across time, and integrates with
 many internal systems fast. This is where governance stops being per-capability
 JSON and becomes a **first-class control plane**.
 
-### 技術研發重點 → architecture
+### R&D focus → architecture
 
 | Framework goal | In this repo → planned | State |
 |---|---|---|
-| 建立任務佇列、主動工作與持續執行的能力 | Task queue + scheduler; seeded by `src/events` task phases (`received`→`triaging`→`awaiting_approval`→`sending`→…) | 🟡→⬜ |
-| 建立長期記憶與學習框架 | Memory service replacing local JSONL (same `MemoryStore` interface) + retrieval/learning loop | ⬜ |
-| 標準化系統介接整合能力，多管道，快速介接內部系統/平台 → **Agent Hub, AI 工作站** | Connector/plugin **registry** + capability matrix (`plugins/*/resources/capability-matrix.md`) generalized | 🟡→⬜ |
+| Task queue, proactive work, continuous execution | Task queue + scheduler; seeded by `src/events` task phases (`received`→`triaging`→`awaiting_approval`→`sending`→…) | 🟡→⬜ |
+| Long-term memory and learning framework | Memory service replacing local JSONL (same `MemoryStore` interface) + retrieval/learning loop | ⬜ |
+| Standardized system integration; multi-channel; fast onboarding of internal systems/platforms → **Agent Hub, AI workstation** | Connector/plugin **registry** + capability matrix (`plugins/*/resources/capability-matrix.md`) generalized | 🟡→⬜ |
 
-### 管理機制 → governance
+### Management & enablement → governance
 
 | Framework goal | Mechanism (see governance.md) | State |
 |---|---|---|
-| 數位同事身份權限管理模式建立 | Unified **RBAC + Policy & Approval Engine** generalizing `email-automation.json`; `permissions:` in `info.yaml` become enforced roles | ⬜ |
-| 成本監控及管理的機制、工具 | Cost meter per turn/tool call; budget ceilings as a Tier control | ⬜ |
-| DC 正式 release 後之上線/迭代/下架之內部審查流程 | Release/review pipeline (promote a colleague definition through review → prod; version + rollback) | ⬜ |
-| 發展單位內文化知識 + 通用型技能及公司守則 | Org/BU knowledge packs as docs; company-wide skill + rule plugins | ⬜ |
+| Colleague identity & permission (RBAC) management model | Unified **RBAC + Policy & Approval Engine** generalizing `email-automation.json`; `permissions:` in `info.yaml` become enforced roles | ⬜ |
+| Cost monitoring and management mechanisms/tools | Cost meter per turn/tool call; budget ceilings as a tier control | ⬜ |
+| Internal review process for release / iteration / retirement after a colleague goes live | Release/review pipeline (promote a colleague definition through review → prod; version + rollback) | ⬜ |
+| Business-unit culture knowledge + general-purpose skills & company rules | Org/BU knowledge packs as docs; company-wide skill + rule plugins | ⬜ |
 
 ```mermaid
 flowchart TB
@@ -138,7 +140,7 @@ flowchart TB
     subgraph CP["CONTROL PLANE (Agent Hub)"]
         Q["Task queue<br/>(intake · persistence · continuity)"]:::ctl
         CTRL["Controller<br/>who-can-task · reply policy"]:::ctl
-        POLENG["Policy & Approval Engine<br/>RBAC × risk-tier × approval"]:::ctl
+        POLENG["Policy & Approval Engine<br/>RBAC x risk-tier x approval"]:::ctl
         COST["Cost meter / budgets"]:::ctl
     end
 
@@ -179,8 +181,9 @@ flowchart TB
 
 ## Level 3 — Cross-unit coordination platform
 
-**對應職級:** 襄理 / 副理（資深同事）·
-**Proficiency:** 具備充分之特定專業領域及金融業/組織文化知識，可直面跨單位協作。
+**Job grade:** Assistant / Deputy Manager (senior colleague) ·
+**Proficiency:** full command of the domain plus financial-industry /
+organizational culture; can collaborate directly across units.
 
 Multiple senior colleagues coordinate, hand off, and share context across
 systems and departments — on a centralized cloud platform.
@@ -192,19 +195,19 @@ systems and departments — on a centralized cloud platform.
 > independent deployments." No colleague registry or multi-tenant agent graph is
 > pushed down into a single deployment.
 
-### 技術研發重點 → architecture
+### R&D focus → architecture
 
 | Framework goal | Mechanism | State |
 |---|---|---|
-| 建立多位數位同事的分工、交接與跨系統協作編排 | Coordination plane: peer routing + handoff protocol between deployments | ⬜ |
-| 建立跨系統工作流程及共享脈絡機制 | Shared context bus + cross-system workflow orchestration | ⬜ |
-| 完成數位同事雲端集中化平台架構 | The distributed topology in [deployment-distributed.md](./deployment-distributed.md) realized (ingress · orchestrator · stateless worker pool · shared identity/memory/audit) | ⬜ |
+| Division of labor, handoff, and cross-system orchestration across multiple colleagues | Coordination plane: peer routing + handoff protocol between deployments | ⬜ |
+| Cross-system workflows and shared-context mechanisms | Shared context bus + cross-system workflow orchestration | ⬜ |
+| Centralized cloud platform architecture for colleagues | The distributed topology in [deployment-distributed.md](./deployment-distributed.md) realized (ingress · coordinator · stateless worker pool · shared identity/memory/audit) | ⬜ |
 
-### 管理機制 → governance
+### Management & enablement → governance
 
 | Framework goal | Mechanism | State |
 |---|---|---|
-| 公司文化知識 | Org-wide knowledge + **org-level policy/governance** layered over each deployment's Policy Engine; cross-unit authorization | ⬜ |
+| Company-wide culture knowledge | Org-wide knowledge + **org-level policy/governance** layered over each deployment's Policy Engine; cross-unit authorization | ⬜ |
 
 ```mermaid
 flowchart TB
